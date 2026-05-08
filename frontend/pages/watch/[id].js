@@ -12,6 +12,7 @@ export default function WatchPage() {
   const [loading, setLoading] = useState(true);
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
+  const [isFavorited, setIsFavorited] = useState(false);
 
   const [toast, setToast] = useState({
     message: "",
@@ -25,9 +26,11 @@ export default function WatchPage() {
   useEffect(() => {
     if (!id) return;
 
-    fetch(`http://localhost:5000/api/movies/${id}`)
-      .then((res) => res.json())
-      .then((data) => {
+    async function loadMovie() {
+      try {
+        const res = await fetch(`http://localhost:5000/api/movies/${id}`);
+        const data = await res.json();
+
         setMovie(data);
 
         if (
@@ -37,13 +40,49 @@ export default function WatchPage() {
           setSelectedEpisode(data.episodes[0]);
         }
 
-        setLoading(false);
-      })
-      .catch((err) => {
+        await checkFavorite(data._id);
+      } catch (err) {
         console.log(err);
+      } finally {
         setLoading(false);
-      });
+      }
+    }
+
+    loadMovie();
   }, [id]);
+
+  const checkFavorite = async (movieId) => {
+    const token = localStorage.getItem("token");
+
+    if (!token || !movieId) {
+      setIsFavorited(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("http://localhost:5000/api/favorites", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!res.ok) {
+        setIsFavorited(false);
+        return;
+      }
+
+      const favorites = await res.json();
+
+      const found = favorites.some(
+        (favorite) => favorite._id === movieId || favorite.id === movieId
+      );
+
+      setIsFavorited(found);
+    } catch (err) {
+      console.log(err);
+      setIsFavorited(false);
+    }
+  };
 
   const handleFavorite = async () => {
     const token = localStorage.getItem("token");
@@ -57,12 +96,15 @@ export default function WatchPage() {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/favorites/${movie._id}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`
+      const res = await fetch(
+        `http://localhost:5000/api/favorites/${movie._id}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
-      });
+      );
 
       const data = await res.json();
 
@@ -71,7 +113,14 @@ export default function WatchPage() {
         return;
       }
 
-      showToast("Adicionado aos favoritos", "success");
+      setIsFavorited(!!data.favorited);
+
+      showToast(
+        data.favorited
+          ? "Adicionado aos favoritos"
+          : "Removido dos favoritos",
+        data.favorited ? "success" : "info"
+      );
     } catch (err) {
       console.log(err);
       showToast("Erro ao favoritar", "error");
@@ -124,8 +173,11 @@ export default function WatchPage() {
         <div className="title-row">
           <h1>{movie.title}</h1>
 
-          <button className="favorite-title-btn" onClick={handleFavorite}>
-            ❤️ Favoritar
+          <button
+            className={isFavorited ? "favorite-title-btn active" : "favorite-title-btn"}
+            onClick={handleFavorite}
+          >
+            {isFavorited ? "💔 Desfavoritar" : "❤️ Favoritar"}
           </button>
         </div>
 
@@ -141,7 +193,7 @@ export default function WatchPage() {
         </div>
 
         <div className="movie-info">
-           <p>{movie.description}</p>
+          <p>{movie.description}</p>
         </div>
 
         {(movie.type === "series" || movie.type === "anime") && (
@@ -226,7 +278,8 @@ export default function WatchPage() {
           white-space: nowrap;
         }
 
-        .favorite-title-btn:hover {
+        .favorite-title-btn:hover,
+        .favorite-title-btn.active {
           background: #e50914;
           transform: translateY(-1px);
         }
@@ -311,7 +364,6 @@ export default function WatchPage() {
             width: 100%;
           }
 
-          .movie-info h2,
           .title-row h1 {
             font-size: 1.5rem;
           }
