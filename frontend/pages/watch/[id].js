@@ -1,6 +1,7 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import API from "../../services/api";
 import VideoPlayer from "../../components/VideoPlayer";
 import Toast from "../../components/Toast";
 
@@ -26,30 +27,33 @@ export default function WatchPage() {
   useEffect(() => {
     if (!id) return;
 
-    async function loadMovie() {
-      try {
-        const res = await fetch(`http://localhost:5000/api/movies/${id}`);
-        const data = await res.json();
-
-        setMovie(data);
-
-        if (
-          (data.type === "series" || data.type === "anime") &&
-          data.episodes?.length
-        ) {
-          setSelectedEpisode(data.episodes[0]);
-        }
-
-        await checkFavorite(data._id);
-      } catch (err) {
-        console.log(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadMovie();
   }, [id]);
+
+  const loadMovie = async () => {
+    try {
+      setLoading(true);
+
+      const res = await API.get(`/movies/${id}`);
+      const data = res.data;
+
+      setMovie(data);
+
+      if (
+        (data.type === "series" || data.type === "anime") &&
+        data.episodes?.length
+      ) {
+        setSelectedEpisode(data.episodes[0]);
+      }
+
+      await checkFavorite(data._id);
+    } catch (err) {
+      console.error(err);
+      setMovie(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const checkFavorite = async (movieId) => {
     const token = localStorage.getItem("token");
@@ -60,26 +64,19 @@ export default function WatchPage() {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/favorites", {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      const res = await API.get("/favorites");
 
-      if (!res.ok) {
-        setIsFavorited(false);
-        return;
-      }
-
-      const favorites = await res.json();
+      const favorites = Array.isArray(res.data) ? res.data : [];
 
       const found = favorites.some(
-        (favorite) => favorite._id === movieId || favorite.id === movieId
+        (favorite) =>
+          favorite._id === movieId ||
+          favorite.id === movieId
       );
 
       setIsFavorited(found);
     } catch (err) {
-      console.log(err);
+      console.error(err);
       setIsFavorited(false);
     }
   };
@@ -96,34 +93,23 @@ export default function WatchPage() {
     }
 
     try {
-      const res = await fetch(
-        `http://localhost:5000/api/favorites/${movie._id}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
+      const res = await API.post(`/favorites/${movie._id}`);
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        showToast(data.message || "Erro ao favoritar", "warning");
-        return;
-      }
-
-      setIsFavorited(!!data.favorited);
+      setIsFavorited(!!res.data.favorited);
 
       showToast(
-        data.favorited
+        res.data.favorited
           ? "Adicionado aos favoritos"
           : "Removido dos favoritos",
-        data.favorited ? "success" : "info"
+        res.data.favorited ? "success" : "info"
       );
     } catch (err) {
-      console.log(err);
-      showToast("Erro ao favoritar", "error");
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message || "Erro ao favoritar",
+        "error"
+      );
     }
   };
 
@@ -132,7 +118,7 @@ export default function WatchPage() {
   }
 
   if (!movie) {
-    return <div className="loading">Filme não encontrado</div>;
+    return <div className="loading">Conteúdo não encontrado</div>;
   }
 
   const groupedEpisodes = {};
@@ -174,7 +160,11 @@ export default function WatchPage() {
           <h1>{movie.title}</h1>
 
           <button
-            className={isFavorited ? "favorite-title-btn active" : "favorite-title-btn"}
+            className={
+              isFavorited
+                ? "favorite-title-btn active"
+                : "favorite-title-btn"
+            }
             onClick={handleFavorite}
           >
             {isFavorited ? "💔 Desfavoritar" : "❤️ Favoritar"}
@@ -202,7 +192,9 @@ export default function WatchPage() {
               {Object.keys(groupedEpisodes).map((season) => (
                 <button
                   key={season}
-                  className={Number(season) === selectedSeason ? "active" : ""}
+                  className={
+                    Number(season) === selectedSeason ? "active" : ""
+                  }
                   onClick={() => setSelectedSeason(Number(season))}
                 >
                   Temporada {season}
@@ -215,8 +207,10 @@ export default function WatchPage() {
                 <button
                   key={`${episode.seasonNumber}-${episode.episodeNumber}`}
                   className={
-                    selectedEpisode?.episodeNumber === episode.episodeNumber &&
-                    selectedEpisode?.seasonNumber === episode.seasonNumber
+                    selectedEpisode?.episodeNumber ===
+                      episode.episodeNumber &&
+                    selectedEpisode?.seasonNumber ===
+                      episode.seasonNumber
                       ? "episode active"
                       : "episode"
                   }
@@ -308,16 +302,25 @@ export default function WatchPage() {
           margin-bottom: 20px;
         }
 
-        .season-selector button {
+        .season-selector button,
+        .episode {
           background: #1f1f1f;
           color: white;
           border: none;
-          padding: 10px 16px;
           border-radius: 8px;
           cursor: pointer;
         }
 
-        .season-selector button.active {
+        .season-selector button {
+          padding: 10px 16px;
+        }
+
+        .episode {
+          padding: 12px 16px;
+        }
+
+        .season-selector button.active,
+        .episode.active {
           background: #e50914;
         }
 
@@ -325,19 +328,6 @@ export default function WatchPage() {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-        }
-
-        .episode {
-          background: #1f1f1f;
-          color: white;
-          border: none;
-          padding: 12px 16px;
-          border-radius: 8px;
-          cursor: pointer;
-        }
-
-        .episode.active {
-          background: #e50914;
         }
 
         .loading {
