@@ -819,3 +819,43 @@ body{
 
   .favorite-card img{height:220px}
 }
+
+/* Scrollbar estilo Netflix */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Chrome, Edge, Opera */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #141414;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #e50914;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2e2e2e #141414;
+}
+
+/* Remove scrollbar horizontal das listas */
+.movie-row::-webkit-scrollbar {
+  display: none;
+}
+
+.movie-row {
+  scrollbar-width: none;
+}
