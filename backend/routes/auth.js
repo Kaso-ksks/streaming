@@ -77,7 +77,7 @@ router.post("/login", async (req, res) => {
 
     if (!valid) {
       return res.status(400).json({
-        message: "Senha inválida"
+        message: "Senha incorreta"
       });
     }
 

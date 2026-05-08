@@ -86,6 +86,7 @@ export default function Profile() {
   const loadFavorites = async () => {
     try {
       const res = await API.get("/favorites");
+
       setFavorites(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
@@ -95,6 +96,7 @@ export default function Profile() {
 
   const getInitial = () => {
     if (!user?.email) return "?";
+
     return user.email.charAt(0).toUpperCase();
   };
 
@@ -372,6 +374,38 @@ export default function Profile() {
             </div>
           </div>
 
+          <section className="favorites-section-custom top-favorites">
+            <h2>❤️ Favoritos</h2>
+
+            {favorites.length === 0 && (
+              <p className="empty-favorites-custom">
+                Nenhum favorito ainda
+              </p>
+            )}
+
+            {favorites.length > 0 && (
+              <div className="favorites-grid-custom">
+                {favorites.map((movie) => (
+                  <Link
+                    key={movie._id}
+                    href={`/watch/${movie._id}`}
+                    className="favorite-card-custom"
+                  >
+                    {movie.image ? (
+                      <img src={movie.image} alt={movie.title} />
+                    ) : (
+                      <div className="favorite-placeholder-custom">
+                        Sem imagem
+                      </div>
+                    )}
+
+                    <span>{movie.title}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
           <div className="profile-grid-custom">
             <section className="profile-section-custom">
               <h2>Dados da conta</h2>
@@ -476,38 +510,6 @@ export default function Profile() {
               Deletar conta
             </button>
           </div>
-
-          <section className="favorites-section-custom">
-            <h2>❤️ Favoritos</h2>
-
-            {favorites.length === 0 && (
-              <p className="empty-favorites-custom">
-                Nenhum favorito ainda
-              </p>
-            )}
-
-            {favorites.length > 0 && (
-              <div className="favorites-grid-custom">
-                {favorites.map((movie) => (
-                  <Link
-                    key={movie._id}
-                    href={`/watch/${movie._id}`}
-                    className="favorite-card-custom"
-                  >
-                    {movie.image ? (
-                      <img src={movie.image} alt={movie.title} />
-                    ) : (
-                      <div className="favorite-placeholder-custom">
-                        Sem imagem
-                      </div>
-                    )}
-
-                    <span>{movie.title}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
         </div>
       </div>
 
@@ -550,7 +552,7 @@ const styles = `
     display: flex;
     align-items: center;
     gap: 24px;
-    margin-bottom: 35px;
+    margin-bottom: 30px;
     padding-bottom: 25px;
     border-bottom: 1px solid #333;
   }
@@ -598,6 +600,12 @@ const styles = `
 
   .profile-header-custom p {
     color: #ccc;
+  }
+
+  .top-favorites {
+    margin-bottom: 28px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid #333;
   }
 
   .profile-grid-custom {
@@ -667,7 +675,6 @@ const styles = `
   .profile-actions-custom {
     display: flex;
     gap: 12px;
-    margin-bottom: 35px;
     flex-wrap: wrap;
   }
 
@@ -709,11 +716,6 @@ const styles = `
     background: #a5000c;
   }
 
-  .favorites-section-custom {
-    border-top: 1px solid #333;
-    padding-top: 25px;
-  }
-
   .favorites-section-custom h2 {
     margin-bottom: 20px;
   }
@@ -726,14 +728,21 @@ const styles = `
   }
 
   .favorites-grid-custom {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 180px));
-    gap: 18px;
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+  }
+
+  .favorites-grid-custom::-webkit-scrollbar {
+    display: none;
   }
 
   .favorite-card-custom {
-    width: 100%;
-    max-width: 180px;
+    min-width: 155px;
+    max-width: 155px;
     background: #242424;
     border-radius: 13px;
     overflow: hidden;
@@ -741,6 +750,7 @@ const styles = `
     color: white;
     transition: 0.2s;
     display: block;
+    flex-shrink: 0;
   }
 
   .favorite-card-custom:hover {
@@ -750,7 +760,7 @@ const styles = `
   .favorite-card-custom img,
   .favorite-placeholder-custom {
     width: 100%;
-    height: 245px;
+    height: 225px;
     object-fit: cover;
     display: block;
   }
@@ -875,6 +885,7 @@ const styles = `
   @media (max-width: 768px) {
     .profile-page-custom {
       padding: 18px;
+      align-items: flex-start;
     }
 
     .profile-card-custom {
@@ -898,17 +909,14 @@ const styles = `
       grid-template-columns: 1fr;
     }
 
-    .favorites-grid-custom {
-      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    }
-
     .favorite-card-custom {
-      max-width: none;
+      min-width: 130px;
+      max-width: 130px;
     }
 
     .favorite-card-custom img,
     .favorite-placeholder-custom {
-      height: 200px;
+      height: 195px;
     }
 
     .streaming-modal {
