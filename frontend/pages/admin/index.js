@@ -103,14 +103,27 @@ export default function Admin() {
   const updateSourceField = (field, value) => {
     setSource((prev) => ({
       ...prev,
-      [field]: value
+      [field]: value,
+      quality:
+        field === "type" && value === "embed"
+          ? "Auto"
+          : prev.quality
     }));
   };
 
   const updateMovieSourceField = (index, field, value) => {
     setMovieSources((prev) =>
       prev.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
+        i === index
+          ? {
+              ...item,
+              [field]: value,
+              quality:
+                field === "type" && value === "embed"
+                  ? "Auto"
+                  : item.quality
+            }
+          : item
       )
     );
   };
@@ -118,7 +131,16 @@ export default function Admin() {
   const updateEpisodeSourceField = (index, field, value) => {
     setEpisodeSources((prev) =>
       prev.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
+        i === index
+          ? {
+              ...item,
+              [field]: value,
+              quality:
+                field === "type" && value === "embed"
+                  ? "Auto"
+                  : item.quality
+            }
+          : item
       )
     );
   };
@@ -305,6 +327,70 @@ export default function Admin() {
     }
   };
 
+  const renderSourceForm = (server, index, updateFn, removeFn) => {
+    return (
+      <div className="source-box-custom" key={index}>
+        <input
+          placeholder="Nome do servidor"
+          value={server.name}
+          onChange={(e) => updateFn(index, "name", e.target.value)}
+        />
+
+        <input
+          placeholder={
+            server.type === "embed"
+              ? "URL do embed/player externo"
+              : "URL .m3u8 ou .mp4"
+          }
+          value={server.url}
+          onChange={(e) => updateFn(index, "url", e.target.value)}
+        />
+
+        <div className="form-grid-custom">
+          <select
+            value={server.type}
+            onChange={(e) => updateFn(index, "type", e.target.value)}
+          >
+            <option value="hls">HLS / m3u8</option>
+            <option value="mp4">MP4</option>
+            <option value="embed">Embed externo</option>
+          </select>
+
+          <select
+            value={server.audio}
+            onChange={(e) => updateFn(index, "audio", e.target.value)}
+          >
+            <option value="dub">Dublado</option>
+            <option value="leg">Legendado</option>
+            <option value="original">Original</option>
+          </select>
+
+          <input
+            placeholder="Qualidade"
+            value={server.quality}
+            onChange={(e) =>
+              updateFn(index, "quality", e.target.value)
+            }
+          />
+        </div>
+
+        {server.type === "embed" && (
+          <p className="embed-warning-custom">
+            Use aqui links de players externos, como Videasy ou outro
+            iframe compatível.
+          </p>
+        )}
+
+        <button
+          className="danger-btn-custom"
+          onClick={() => removeFn(index)}
+        >
+          Remover servidor
+        </button>
+      </div>
+    );
+  };
+
   return (
     <>
       <Toast
@@ -421,7 +507,11 @@ export default function Admin() {
               />
 
               <input
-                placeholder="URL do vídeo .m3u8 ou .mp4"
+                placeholder={
+                  source.type === "embed"
+                    ? "URL do embed/player externo"
+                    : "URL do vídeo .m3u8 ou .mp4"
+                }
                 value={source.url}
                 onChange={(e) =>
                   updateSourceField("url", e.target.value)
@@ -437,6 +527,7 @@ export default function Admin() {
                 >
                   <option value="hls">HLS / m3u8</option>
                   <option value="mp4">MP4</option>
+                  <option value="embed">Embed externo</option>
                 </select>
 
                 <select
@@ -451,13 +542,20 @@ export default function Admin() {
                 </select>
 
                 <input
-                  placeholder="Qualidade. Ex: 1080p"
+                  placeholder="Qualidade. Ex: 1080p ou Auto"
                   value={source.quality}
                   onChange={(e) =>
                     updateSourceField("quality", e.target.value)
                   }
                 />
               </div>
+
+              {source.type === "embed" && (
+                <p className="embed-warning-custom">
+                  Para Videasy ou outro player externo, cole a URL completa
+                  do embed/player.
+                </p>
+              )}
             </div>
           )}
 
@@ -541,75 +639,14 @@ export default function Admin() {
               <>
                 <h3>Servidores do filme</h3>
 
-                {movieSources.map((server, index) => (
-                  <div className="source-box-custom" key={index}>
-                    <input
-                      placeholder="Nome do servidor"
-                      value={server.name}
-                      onChange={(e) =>
-                        updateMovieSourceField(index, "name", e.target.value)
-                      }
-                    />
-
-                    <input
-                      placeholder="URL .m3u8 ou .mp4"
-                      value={server.url}
-                      onChange={(e) =>
-                        updateMovieSourceField(index, "url", e.target.value)
-                      }
-                    />
-
-                    <div className="form-grid-custom">
-                      <select
-                        value={server.type}
-                        onChange={(e) =>
-                          updateMovieSourceField(
-                            index,
-                            "type",
-                            e.target.value
-                          )
-                        }
-                      >
-                        <option value="hls">HLS / m3u8</option>
-                        <option value="mp4">MP4</option>
-                      </select>
-
-                      <select
-                        value={server.audio}
-                        onChange={(e) =>
-                          updateMovieSourceField(
-                            index,
-                            "audio",
-                            e.target.value
-                          )
-                        }
-                      >
-                        <option value="dub">Dublado</option>
-                        <option value="leg">Legendado</option>
-                        <option value="original">Original</option>
-                      </select>
-
-                      <input
-                        placeholder="Qualidade"
-                        value={server.quality}
-                        onChange={(e) =>
-                          updateMovieSourceField(
-                            index,
-                            "quality",
-                            e.target.value
-                          )
-                        }
-                      />
-                    </div>
-
-                    <button
-                      className="danger-btn-custom"
-                      onClick={() => removeMovieSource(index)}
-                    >
-                      Remover servidor
-                    </button>
-                  </div>
-                ))}
+                {movieSources.map((server, index) =>
+                  renderSourceForm(
+                    server,
+                    index,
+                    updateMovieSourceField,
+                    removeMovieSource
+                  )
+                )}
 
                 <button onClick={addMovieSource}>Adicionar servidor</button>
 
@@ -662,83 +699,14 @@ export default function Admin() {
                       {selectedEpisode.episodeNumber}
                     </h3>
 
-                    {episodeSources.map((server, index) => (
-                      <div className="source-box-custom" key={index}>
-                        <input
-                          placeholder="Nome do servidor"
-                          value={server.name}
-                          onChange={(e) =>
-                            updateEpisodeSourceField(
-                              index,
-                              "name",
-                              e.target.value
-                            )
-                          }
-                        />
-
-                        <input
-                          placeholder="URL .m3u8 ou .mp4"
-                          value={server.url}
-                          onChange={(e) =>
-                            updateEpisodeSourceField(
-                              index,
-                              "url",
-                              e.target.value
-                            )
-                          }
-                        />
-
-                        <div className="form-grid-custom">
-                          <select
-                            value={server.type}
-                            onChange={(e) =>
-                              updateEpisodeSourceField(
-                                index,
-                                "type",
-                                e.target.value
-                              )
-                            }
-                          >
-                            <option value="hls">HLS / m3u8</option>
-                            <option value="mp4">MP4</option>
-                          </select>
-
-                          <select
-                            value={server.audio}
-                            onChange={(e) =>
-                              updateEpisodeSourceField(
-                                index,
-                                "audio",
-                                e.target.value
-                              )
-                            }
-                          >
-                            <option value="dub">Dublado</option>
-                            <option value="leg">Legendado</option>
-                            <option value="original">Original</option>
-                          </select>
-
-                          <input
-                            placeholder="Qualidade"
-                            value={server.quality}
-                            onChange={(e) =>
-                              updateEpisodeSourceField(
-                                index,
-                                "quality",
-                                e.target.value
-                              )
-                            }
-                          />
-                        </div>
-
-                        <button
-                          className="danger-btn-custom"
-                          onClick={() => removeEpisodeSource(index)}
-                        >
-                          Remover servidor
-                        </button>
-                      </div>
-                    ))}
+                    {episodeSources.map((server, index) =>
+                      renderSourceForm(
+                        server,
+                        index,
+                        updateEpisodeSourceField,
+                        removeEpisodeSource
+                      )
+                    )}
 
                     <button onClick={addEpisodeSource}>
                       Adicionar servidor
@@ -902,6 +870,16 @@ export default function Admin() {
           padding: 15px;
           border-radius: 12px;
           margin-bottom: 15px;
+        }
+
+        .embed-warning-custom {
+          background: rgba(229, 9, 20, 0.12);
+          border: 1px solid rgba(229, 9, 20, 0.35);
+          color: #f1f1f1;
+          padding: 12px;
+          border-radius: 8px;
+          margin-bottom: 10px;
+          font-size: 14px;
         }
 
         .movie-list-custom {

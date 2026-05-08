@@ -23,8 +23,8 @@ const SourceSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["hls", "mp4"],
-      default: "mp4"
+      enum: ["hls", "mp4", "embed"],
+      default: "hls"
     },
 
     audio: {
@@ -35,7 +35,7 @@ const SourceSchema = new mongoose.Schema(
 
     quality: {
       type: String,
-      default: "HD"
+      default: "Auto"
     },
 
     subtitles: [SubtitleSchema]
@@ -46,13 +46,9 @@ const SourceSchema = new mongoose.Schema(
 const EpisodeSchema = new mongoose.Schema(
   {
     title: String,
-
     episodeNumber: Number,
-
     seasonNumber: Number,
-
     imdbId: String,
-
     sources: [SourceSchema]
   },
   { _id: false }
@@ -71,7 +67,6 @@ const MovieSchema = new mongoose.Schema(
     },
 
     image: String,
-
     banner: String,
 
     imdbId: {
@@ -80,7 +75,6 @@ const MovieSchema = new mongoose.Schema(
     },
 
     tmdbId: Number,
-
     category: String,
 
     featured: {
@@ -95,7 +89,6 @@ const MovieSchema = new mongoose.Schema(
     },
 
     sources: [SourceSchema],
-
     episodes: [EpisodeSchema]
   },
   {
