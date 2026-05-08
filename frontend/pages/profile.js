@@ -8,7 +8,6 @@ export default function Profile() {
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [loaded, setLoaded] = useState(false);
-
   const [saving, setSaving] = useState(false);
 
   const [deleteModal, setDeleteModal] = useState({
@@ -87,8 +86,7 @@ export default function Profile() {
   const loadFavorites = async () => {
     try {
       const res = await API.get("/favorites");
-
-      setFavorites(res.data);
+      setFavorites(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
       setFavorites([]);
@@ -97,7 +95,6 @@ export default function Profile() {
 
   const getInitial = () => {
     if (!user?.email) return "?";
-
     return user.email.charAt(0).toUpperCase();
   };
 
@@ -207,8 +204,7 @@ export default function Profile() {
       }));
 
       showToast(
-        err.response?.data?.message ||
-          "Erro ao deletar conta",
+        err.response?.data?.message || "Erro ao deletar conta",
         "error"
       );
     }
@@ -237,6 +233,8 @@ export default function Profile() {
             </button>
           </div>
         </div>
+
+        <style jsx>{styles}</style>
       </>
     );
   }
@@ -276,9 +274,7 @@ export default function Profile() {
 
                   <h2>Deletar conta</h2>
 
-                  <p>
-                    Digite sua senha para continuar.
-                  </p>
+                  <p>Digite sua senha para continuar.</p>
 
                   <input
                     type="password"
@@ -490,436 +486,450 @@ export default function Profile() {
               </p>
             )}
 
-            <div className="favorites-grid-custom">
-              {favorites.map((movie) => (
-                <Link
-                  key={movie._id}
-                  href={`/movie/${movie._id}`}
-                  className="favorite-card-custom"
-                >
-                  {movie.image ? (
-                    <img src={movie.image} alt={movie.title} />
-                  ) : (
-                    <div className="favorite-placeholder-custom">
-                      Sem imagem
-                    </div>
-                  )}
+            {favorites.length > 0 && (
+              <div className="favorites-grid-custom">
+                {favorites.map((movie) => (
+                  <Link
+                    key={movie._id}
+                    href={`/watch/${movie._id}`}
+                    className="favorite-card-custom"
+                  >
+                    {movie.image ? (
+                      <img src={movie.image} alt={movie.title} />
+                    ) : (
+                      <div className="favorite-placeholder-custom">
+                        Sem imagem
+                      </div>
+                    )}
 
-                  <span>{movie.title}</span>
-                </Link>
-              ))}
-            </div>
+                    <span>{movie.title}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>
 
-      <style jsx>{`
-        .profile-page-custom {
-          width: 100%;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 35px;
-          background:
-            linear-gradient(
-              rgba(0, 0, 0, 0.6),
-              rgba(20, 20, 20, 1)
-            ),
-            #141414;
-        }
-
-        .profile-card-custom {
-          width: 100%;
-          max-width: 1100px;
-          background: #1b1b1b;
-          border-radius: 18px;
-          padding: 35px;
-          box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
-        }
-
-        .small-card {
-          max-width: 450px;
-          text-align: center;
-        }
-
-        .profile-header-custom {
-          display: flex;
-          align-items: center;
-          gap: 24px;
-          margin-bottom: 35px;
-          padding-bottom: 25px;
-          border-bottom: 1px solid #333;
-        }
-
-        .profile-avatar-custom {
-          width: 120px;
-          height: 120px;
-          border-radius: 28px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          overflow: hidden;
-          background: linear-gradient(135deg, #e50914, #7a0006);
-          flex-shrink: 0;
-        }
-
-        .profile-avatar-custom img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .profile-avatar-custom span {
-          color: white;
-          font-size: 46px;
-          font-weight: bold;
-        }
-
-        .profile-tag-custom {
-          display: inline-block;
-          background: #e50914;
-          color: white;
-          padding: 7px 12px;
-          border-radius: 999px;
-          font-size: 13px;
-          font-weight: bold;
-          margin-bottom: 10px;
-        }
-
-        .profile-header-custom h1 {
-          font-size: 2.4rem;
-          margin-bottom: 8px;
-        }
-
-        .profile-header-custom p {
-          color: #ccc;
-        }
-
-        .profile-grid-custom {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 20px;
-          margin-bottom: 25px;
-        }
-
-        .profile-section-custom {
-          background: #242424;
-          padding: 22px;
-          border-radius: 15px;
-        }
-
-        .profile-section-custom h2 {
-          margin-bottom: 18px;
-        }
-
-        label {
-          display: block;
-          color: #bbb;
-          font-size: 14px;
-          margin-bottom: 8px;
-        }
-
-        input {
-          width: 100%;
-          background: #151515;
-          color: white;
-          border: 1px solid #333;
-          padding: 14px;
-          border-radius: 10px;
-          outline: none;
-          margin-bottom: 16px;
-        }
-
-        input:focus {
-          border-color: #e50914;
-          box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.25);
-        }
-
-        .account-info-custom {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-          margin-top: 5px;
-        }
-
-        .account-info-custom div {
-          background: #151515;
-          padding: 15px;
-          border-radius: 12px;
-        }
-
-        .account-info-custom span {
-          display: block;
-          color: #999;
-          font-size: 13px;
-          margin-bottom: 5px;
-        }
-
-        .account-info-custom strong {
-          color: white;
-        }
-
-        .profile-actions-custom {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 35px;
-          flex-wrap: wrap;
-        }
-
-        button {
-          border: none;
-          padding: 14px 18px;
-          border-radius: 10px;
-          cursor: pointer;
-          color: white;
-          font-weight: bold;
-          transition: 0.2s;
-        }
-
-        button:hover {
-          opacity: 0.9;
-          transform: translateY(-1px);
-        }
-
-        button:disabled {
-          opacity: 0.65;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .primary-btn-custom {
-          background: #e50914;
-          flex: 1;
-        }
-
-        .logout-btn-custom {
-          background: #333;
-        }
-
-        .delete-account-btn-custom {
-          background: #7a0006;
-        }
-
-        .delete-account-btn-custom:hover {
-          background: #a5000c;
-        }
-
-        .favorites-section-custom {
-          border-top: 1px solid #333;
-          padding-top: 25px;
-        }
-
-        .favorites-section-custom h2 {
-          margin-bottom: 20px;
-        }
-
-        .empty-favorites-custom {
-          color: #aaa;
-          background: #242424;
-          padding: 18px;
-          border-radius: 12px;
-        }
-
-        .favorites-grid-custom {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-          gap: 18px;
-        }
-
-        .favorite-card-custom {
-          background: #242424;
-          border-radius: 13px;
-          overflow: hidden;
-          text-decoration: none;
-          color: white;
-          transition: 0.2s;
-        }
-
-        .favorite-card-custom:hover {
-          transform: scale(1.03);
-        }
-
-        .favorite-card-custom img {
-          width: 100%;
-          height: 240px;
-          object-fit: cover;
-          display: block;
-        }
-
-        .favorite-placeholder-custom {
-          height: 240px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #777;
-          background: #111;
-        }
-
-        .favorite-card-custom span {
-          display: block;
-          padding: 12px;
-          font-weight: bold;
-          font-size: 14px;
-        }
-
-        .loading {
-          width: 100%;
-          height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: #141414;
-          color: white;
-          font-size: 24px;
-        }
-
-        .streaming-modal-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 9999;
-          background: rgba(0, 0, 0, 0.78);
-          backdrop-filter: blur(8px);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 20px;
-        }
-
-        .streaming-modal {
-          width: 100%;
-          max-width: 680px;
-          background: linear-gradient(135deg, #242424, #111);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 18px;
-          overflow: hidden;
-          display: grid;
-          grid-template-columns: 180px 1fr;
-          box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
-        }
-
-        .modal-danger-side {
-          background: linear-gradient(180deg, #7a0006, #2a0002);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-
-        .modal-danger-side span {
-          font-size: 5rem;
-          color: white;
-          font-weight: bold;
-        }
-
-        .modal-content {
-          padding: 32px;
-        }
-
-        .modal-content h2 {
-          margin-bottom: 12px;
-          font-size: 2rem;
-        }
-
-        .modal-content p {
-          color: #ccc;
-          margin-bottom: 20px;
-          line-height: 1.6;
-        }
-
-        .modal-tag {
-          display: inline-block;
-          padding: 7px 12px;
-          border-radius: 999px;
-          margin-bottom: 14px;
-          font-size: 13px;
-          font-weight: bold;
-          color: white;
-        }
-
-        .modal-tag.danger {
-          background: #e50914;
-        }
-
-        .modal-actions {
-          display: flex;
-          gap: 12px;
-          margin-top: 15px;
-        }
-
-        .modal-cancel,
-        .modal-delete {
-          flex: 1;
-        }
-
-        .modal-cancel {
-          background: #444;
-        }
-
-        .modal-delete {
-          background: #e50914;
-        }
-
-        .modal-delete:hover {
-          background: #ff1f1f;
-        }
-
-        @media (max-width: 768px) {
-          .profile-page-custom {
-            padding: 18px;
-          }
-
-          .profile-card-custom {
-            padding: 22px;
-          }
-
-          .profile-header-custom {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .profile-grid-custom {
-            grid-template-columns: 1fr;
-          }
-
-          .profile-actions-custom {
-            flex-direction: column;
-          }
-
-          .account-info-custom {
-            grid-template-columns: 1fr;
-          }
-
-          .favorites-grid-custom {
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-          }
-
-          .favorite-card-custom img,
-          .favorite-placeholder-custom {
-            height: 200px;
-          }
-
-          .streaming-modal {
-            grid-template-columns: 1fr;
-            max-width: 430px;
-          }
-
-          .modal-danger-side {
-            height: 140px;
-          }
-
-          .modal-content {
-            padding: 24px;
-          }
-
-          .modal-actions {
-            flex-direction: column;
-          }
-
-          .modal-content h2 {
-            font-size: 1.6rem;
-          }
-        }
-      `}</style>
+      <style jsx>{styles}</style>
     </>
   );
 }
+
+const styles = `
+  .profile-page-custom {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 35px;
+    background:
+      linear-gradient(
+        rgba(0, 0, 0, 0.6),
+        rgba(20, 20, 20, 1)
+      ),
+      #141414;
+  }
+
+  .profile-card-custom {
+    width: 100%;
+    max-width: 1100px;
+    background: #1b1b1b;
+    border-radius: 18px;
+    padding: 35px;
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+  }
+
+  .small-card {
+    max-width: 450px;
+    text-align: center;
+  }
+
+  .profile-header-custom {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 35px;
+    padding-bottom: 25px;
+    border-bottom: 1px solid #333;
+  }
+
+  .profile-avatar-custom {
+    width: 120px;
+    height: 120px;
+    border-radius: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: linear-gradient(135deg, #e50914, #7a0006);
+    flex-shrink: 0;
+  }
+
+  .profile-avatar-custom img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .profile-avatar-custom span {
+    color: white;
+    font-size: 46px;
+    font-weight: bold;
+  }
+
+  .profile-tag-custom {
+    display: inline-block;
+    background: #e50914;
+    color: white;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  .profile-header-custom h1 {
+    font-size: 2.4rem;
+    margin-bottom: 8px;
+  }
+
+  .profile-header-custom p {
+    color: #ccc;
+  }
+
+  .profile-grid-custom {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
+  }
+
+  .profile-section-custom {
+    background: #242424;
+    padding: 22px;
+    border-radius: 15px;
+  }
+
+  .profile-section-custom h2 {
+    margin-bottom: 18px;
+  }
+
+  label {
+    display: block;
+    color: #bbb;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  input {
+    width: 100%;
+    background: #151515;
+    color: white;
+    border: 1px solid #333;
+    padding: 14px;
+    border-radius: 10px;
+    outline: none;
+    margin-bottom: 16px;
+  }
+
+  input:focus {
+    border-color: #e50914;
+    box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.25);
+  }
+
+  .account-info-custom {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 5px;
+  }
+
+  .account-info-custom div {
+    background: #151515;
+    padding: 15px;
+    border-radius: 12px;
+  }
+
+  .account-info-custom span {
+    display: block;
+    color: #999;
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+
+  .account-info-custom strong {
+    color: white;
+  }
+
+  .profile-actions-custom {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 35px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    border: none;
+    padding: 14px 18px;
+    border-radius: 10px;
+    cursor: pointer;
+    color: white;
+    font-weight: bold;
+    transition: 0.2s;
+  }
+
+  button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .primary-btn-custom {
+    background: #e50914;
+    flex: 1;
+  }
+
+  .logout-btn-custom {
+    background: #333;
+  }
+
+  .delete-account-btn-custom {
+    background: #7a0006;
+  }
+
+  .delete-account-btn-custom:hover {
+    background: #a5000c;
+  }
+
+  .favorites-section-custom {
+    border-top: 1px solid #333;
+    padding-top: 25px;
+  }
+
+  .favorites-section-custom h2 {
+    margin-bottom: 20px;
+  }
+
+  .empty-favorites-custom {
+    color: #aaa;
+    background: #242424;
+    padding: 18px;
+    border-radius: 12px;
+  }
+
+  .favorites-grid-custom {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 180px));
+    gap: 18px;
+  }
+
+  .favorite-card-custom {
+    width: 100%;
+    max-width: 180px;
+    background: #242424;
+    border-radius: 13px;
+    overflow: hidden;
+    text-decoration: none;
+    color: white;
+    transition: 0.2s;
+    display: block;
+  }
+
+  .favorite-card-custom:hover {
+    transform: scale(1.03);
+  }
+
+  .favorite-card-custom img,
+  .favorite-placeholder-custom {
+    width: 100%;
+    height: 245px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .favorite-placeholder-custom {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #777;
+    background: #111;
+  }
+
+  .favorite-card-custom span {
+    display: block;
+    padding: 12px;
+    font-weight: bold;
+    font-size: 14px;
+    color: white;
+    text-decoration: none;
+  }
+
+  .loading {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #141414;
+    color: white;
+    font-size: 24px;
+  }
+
+  .streaming-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(8px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .streaming-modal {
+    width: 100%;
+    max-width: 680px;
+    background: linear-gradient(135deg, #242424, #111);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
+  }
+
+  .modal-danger-side {
+    background: linear-gradient(180deg, #7a0006, #2a0002);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .modal-danger-side span {
+    font-size: 5rem;
+    color: white;
+    font-weight: bold;
+  }
+
+  .modal-content {
+    padding: 32px;
+  }
+
+  .modal-content h2 {
+    margin-bottom: 12px;
+    font-size: 2rem;
+  }
+
+  .modal-content p {
+    color: #ccc;
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .modal-tag {
+    display: inline-block;
+    padding: 7px 12px;
+    border-radius: 999px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    font-weight: bold;
+    color: white;
+  }
+
+  .modal-tag.danger {
+    background: #e50914;
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 15px;
+  }
+
+  .modal-cancel,
+  .modal-delete {
+    flex: 1;
+  }
+
+  .modal-cancel {
+    background: #444;
+  }
+
+  .modal-delete {
+    background: #e50914;
+  }
+
+  .modal-delete:hover {
+    background: #ff1f1f;
+  }
+
+  @media (max-width: 768px) {
+    .profile-page-custom {
+      padding: 18px;
+    }
+
+    .profile-card-custom {
+      padding: 22px;
+    }
+
+    .profile-header-custom {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .profile-grid-custom {
+      grid-template-columns: 1fr;
+    }
+
+    .profile-actions-custom {
+      flex-direction: column;
+    }
+
+    .account-info-custom {
+      grid-template-columns: 1fr;
+    }
+
+    .favorites-grid-custom {
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    }
+
+    .favorite-card-custom {
+      max-width: none;
+    }
+
+    .favorite-card-custom img,
+    .favorite-placeholder-custom {
+      height: 200px;
+    }
+
+    .streaming-modal {
+      grid-template-columns: 1fr;
+      max-width: 430px;
+    }
+
+    .modal-danger-side {
+      height: 140px;
+    }
+
+    .modal-content {
+      padding: 24px;
+    }
+
+    .modal-actions {
+      flex-direction: column;
+    }
+
+    .modal-content h2 {
+      font-size: 1.6rem;
+    }
+  }
+`;

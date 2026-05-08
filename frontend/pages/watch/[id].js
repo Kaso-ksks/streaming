@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import VideoPlayer from "../../components/VideoPlayer";
+import Toast from "../../components/Toast";
 
 export default function WatchPage() {
   const router = useRouter();
@@ -9,9 +10,17 @@ export default function WatchPage() {
 
   const [movie, setMovie] = useState(null);
   const [loading, setLoading] = useState(true);
-
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
+
+  const [toast, setToast] = useState({
+    message: "",
+    type: "info"
+  });
+
+  const showToast = (message, type = "info") => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -22,8 +31,7 @@ export default function WatchPage() {
         setMovie(data);
 
         if (
-          (data.type === "series" ||
-            data.type === "anime") &&
+          (data.type === "series" || data.type === "anime") &&
           data.episodes?.length
         ) {
           setSelectedEpisode(data.episodes[0]);
@@ -37,20 +45,45 @@ export default function WatchPage() {
       });
   }, [id]);
 
+  const handleFavorite = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      showToast(
+        "Você precisa fazer login ou se registrar para favoritar",
+        "warning"
+      );
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/favorites/${movie._id}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.message || "Erro ao favoritar", "warning");
+        return;
+      }
+
+      showToast("Adicionado aos favoritos", "success");
+    } catch (err) {
+      console.log(err);
+      showToast("Erro ao favoritar", "error");
+    }
+  };
+
   if (loading) {
-    return (
-      <div className="loading">
-        Carregando...
-      </div>
-    );
+    return <div className="loading">Carregando...</div>;
   }
 
   if (!movie) {
-    return (
-      <div className="loading">
-        Filme não encontrado
-      </div>
-    );
+    return <div className="loading">Filme não encontrado</div>;
   }
 
   const groupedEpisodes = {};
@@ -70,13 +103,30 @@ export default function WatchPage() {
 
   return (
     <>
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() =>
+          setToast({
+            message: "",
+            type: "info"
+          })
+        }
+      />
+
       <div className="watch-page">
         <div className="topbar">
           <Link href="/">
-            <button>← Voltar</button>
+            <button className="back-btn">← Voltar</button>
           </Link>
+        </div>
 
+        <div className="title-row">
           <h1>{movie.title}</h1>
+
+          <button className="favorite-title-btn" onClick={handleFavorite}>
+            ❤️ Favoritar
+          </button>
         </div>
 
         <div className="player-section">
@@ -91,55 +141,38 @@ export default function WatchPage() {
         </div>
 
         <div className="movie-info">
-          <h2>{movie.title}</h2>
-
-          <p>{movie.description}</p>
+           <p>{movie.description}</p>
         </div>
 
-        {(movie.type === "series" ||
-          movie.type === "anime") && (
+        {(movie.type === "series" || movie.type === "anime") && (
           <div className="episodes-section">
             <div className="season-selector">
-              {Object.keys(groupedEpisodes).map(
-                (season) => (
-                  <button
-                    key={season}
-                    className={
-                      Number(season) === selectedSeason
-                        ? "active"
-                        : ""
-                    }
-                    onClick={() =>
-                      setSelectedSeason(Number(season))
-                    }
-                  >
-                    Temporada {season}
-                  </button>
-                )
-              )}
+              {Object.keys(groupedEpisodes).map((season) => (
+                <button
+                  key={season}
+                  className={Number(season) === selectedSeason ? "active" : ""}
+                  onClick={() => setSelectedSeason(Number(season))}
+                >
+                  Temporada {season}
+                </button>
+              ))}
             </div>
 
             <div className="episodes-grid">
-              {groupedEpisodes[selectedSeason]?.map(
-                (episode) => (
-                  <button
-                    key={`${episode.seasonNumber}-${episode.episodeNumber}`}
-                    className={
-                      selectedEpisode?.episodeNumber ===
-                        episode.episodeNumber &&
-                      selectedEpisode?.seasonNumber ===
-                        episode.seasonNumber
-                        ? "episode active"
-                        : "episode"
-                    }
-                    onClick={() =>
-                      setSelectedEpisode(episode)
-                    }
-                  >
-                    EP {episode.episodeNumber}
-                  </button>
-                )
-              )}
+              {groupedEpisodes[selectedSeason]?.map((episode) => (
+                <button
+                  key={`${episode.seasonNumber}-${episode.episodeNumber}`}
+                  className={
+                    selectedEpisode?.episodeNumber === episode.episodeNumber &&
+                    selectedEpisode?.seasonNumber === episode.seasonNumber
+                      ? "episode active"
+                      : "episode"
+                  }
+                  onClick={() => setSelectedEpisode(episode)}
+                >
+                  EP {episode.episodeNumber}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -156,11 +189,10 @@ export default function WatchPage() {
         .topbar {
           display: flex;
           align-items: center;
-          gap: 15px;
-          margin-bottom: 20px;
+          margin-bottom: 18px;
         }
 
-        .topbar button {
+        .back-btn {
           background: #e50914;
           color: white;
           border: none;
@@ -170,8 +202,33 @@ export default function WatchPage() {
           font-weight: bold;
         }
 
-        .topbar h1 {
-          font-size: 1.8rem;
+        .title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          margin-bottom: 20px;
+        }
+
+        .title-row h1 {
+          font-size: 2rem;
+        }
+
+        .favorite-title-btn {
+          background: #222;
+          color: white;
+          border: none;
+          padding: 12px 16px;
+          border-radius: 10px;
+          cursor: pointer;
+          font-weight: bold;
+          transition: 0.2s;
+          white-space: nowrap;
+        }
+
+        .favorite-title-btn:hover {
+          background: #e50914;
+          transform: translateY(-1px);
         }
 
         .player-section {
@@ -180,11 +237,6 @@ export default function WatchPage() {
 
         .movie-info {
           margin-bottom: 30px;
-        }
-
-        .movie-info h2 {
-          font-size: 2rem;
-          margin-bottom: 10px;
         }
 
         .movie-info p {
@@ -250,12 +302,17 @@ export default function WatchPage() {
             padding: 10px;
           }
 
-          .topbar {
+          .title-row {
             flex-direction: column;
             align-items: flex-start;
           }
 
-          .movie-info h2 {
+          .favorite-title-btn {
+            width: 100%;
+          }
+
+          .movie-info h2,
+          .title-row h1 {
             font-size: 1.5rem;
           }
         }

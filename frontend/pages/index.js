@@ -124,7 +124,7 @@ export default function Home() {
               </Link>
 
               <Link
-                href={`/movie/${featuredMovie._id}`}
+                href={`/watch/${featuredMovie._id}`}
                 className="info-button"
               >
                 Mais informações
@@ -189,7 +189,7 @@ export default function Home() {
 
 function MovieCard({ movie }) {
   return (
-    <Link href={`/movie/${movie._id}`} className="row-card">
+    <Link href={`/watch/${movie._id}`} className="row-card">
       {movie.image ? (
         <img src={movie.image} alt={movie.title} />
       ) : (
