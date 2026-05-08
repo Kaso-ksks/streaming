@@ -1,35 +1,42 @@
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import API from "../services/api";
 
-export default function Home() {
+function getMovieCategories(movie) {
+  if (!movie.category) return [];
 
+  return movie.category
+    .split(",")
+    .map((category) => category.trim())
+    .filter(Boolean);
+}
+
+export default function Home() {
   const [movies, setMovies] = useState([]);
   const [user, setUser] = useState(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-
     API.get("/movies")
       .then((res) => setMovies(res.data))
-      .catch((err) =>
-        console.error("Erro ao buscar filmes:", err)
-      );
+      .catch((err) => console.error("Erro ao buscar filmes:", err));
 
     const savedUser = localStorage.getItem("user");
 
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem("user");
+      }
     }
-
   }, []);
 
   const handleLogout = () => {
-
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 
     setUser(null);
-
     window.location.href = "/";
   };
 
@@ -42,249 +49,154 @@ export default function Home() {
     movies.find((movie) => movie.featured) || movies[0];
 
   const filteredMovies = movies.filter((movie) =>
-    movie.title
-      ?.toLowerCase()
-      .includes(search.toLowerCase())
+    movie.title?.toLowerCase().includes(search.toLowerCase())
   );
 
   const categories = [
     ...new Set(
-      filteredMovies
-        .map((movie) => movie.category)
-        .filter(Boolean)
+      filteredMovies.flatMap((movie) => getMovieCategories(movie))
     )
-  ];
+  ].sort();
 
   return (
     <div className="home-page">
-
       <header className="header">
-
-        <h1>🎬 Streaming</h1>
+        <Link href="/" className="logo">
+          <h1>Streaming</h1>
+        </Link>
 
         <div className="header-center">
-
           <input
-            type="text"
-            placeholder="Buscar filmes..."
             className="search-input"
+            placeholder="Buscar filmes, séries e animes..."
             value={search}
-            onChange={(e) =>
-              setSearch(e.target.value)
-            }
+            onChange={(e) => setSearch(e.target.value)}
           />
-
         </div>
 
         <div className="header-buttons">
-
           {user ? (
             <>
-              {user.isAdmin && (
-                <a href="/admin">
-                  Admin
-                </a>
-              )}
+              {user.isAdmin && <Link href="/admin">Admin</Link>}
 
-              <a
-                href="/profile"
-                className="avatar-button"
-              >
-                {getInitial()}
-              </a>
+              <Link href="/profile" className="avatar-button">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Perfil" />
+                ) : (
+                  <span>{getInitial()}</span>
+                )}
+              </Link>
 
-              <button onClick={handleLogout}>
-                Sair
-              </button>
+              <button onClick={handleLogout}>Sair</button>
             </>
           ) : (
             <>
-              <a href="/login">
-                Login
-              </a>
-
-              <a href="/register">
-                Registrar
-              </a>
+              <Link href="/login">Login</Link>
+              <Link href="/register">Registrar</Link>
             </>
           )}
-
         </div>
-
       </header>
 
       {!search && featuredMovie && (
         <section
           className="hero"
           style={{
-            backgroundImage:
-              `linear-gradient(to right, #141414 25%, rgba(20,20,20,0.4)), url(${featuredMovie.banner || featuredMovie.image})`
+            backgroundImage: `linear-gradient(
+              rgba(0,0,0,.45),
+              rgba(20,20,20,1)
+            ), url(${featuredMovie.banner || featuredMovie.image})`
           }}
         >
-
           <div className="hero-content">
+            <span className="hero-tag">Destaque</span>
 
-            <span className="hero-tag">
-              Destaque
-            </span>
+            <h2>{featuredMovie.title}</h2>
 
-            <h2>
-              {featuredMovie.title}
-            </h2>
-
-            <p>
-              {featuredMovie.description}
-            </p>
+            <p>{featuredMovie.description}</p>
 
             <div className="hero-buttons">
-
-              <a
+              <Link
                 href={`/watch/${featuredMovie._id}`}
                 className="play-button"
               >
                 ▶ Assistir
-              </a>
+              </Link>
 
-              <a
-                href={`/watch/${featuredMovie._id}`}
+              <Link
+                href={`/movie/${featuredMovie._id}`}
                 className="info-button"
               >
                 Mais informações
-              </a>
-
+              </Link>
             </div>
-
           </div>
-
         </section>
       )}
 
       <main className="container">
-
         {search && (
           <section className="movie-section">
-
             <h2 className="section-title">
               Resultados para "{search}"
             </h2>
 
             <div className="movie-row">
-
               {filteredMovies.map((movie) => (
-
-                <a
-                  href={`/watch/${movie._id}`}
-                  className="row-card"
-                  key={movie._id}
-                >
-
-                  <img
-                    src={
-                      movie.image ||
-                      "https://via.placeholder.com/300x450"
-                    }
-                    alt={movie.title}
-                  />
-
-                  <div className="card-title">
-                    {movie.title}
-                  </div>
-
-                </a>
+                <MovieCard key={movie._id} movie={movie} />
               ))}
-
             </div>
-
           </section>
         )}
 
         {!search && (
           <>
             <section className="movie-section">
-
-              <h2 className="section-title">
-                Todos
-              </h2>
+              <h2 className="section-title">Todos</h2>
 
               <div className="movie-row">
-
                 {movies.map((movie) => (
-
-                  <a
-                    href={`/watch/${movie._id}`}
-                    className="row-card"
-                    key={movie._id}
-                  >
-
-                    <img
-                      src={
-                        movie.image ||
-                        "https://via.placeholder.com/300x450"
-                      }
-                      alt={movie.title}
-                    />
-
-                    <div className="card-title">
-                      {movie.title}
-                    </div>
-
-                  </a>
+                  <MovieCard key={movie._id} movie={movie} />
                 ))}
-
               </div>
-
             </section>
 
-            {categories.map((category) => (
+            {categories.map((category) => {
+              const categoryMovies = movies.filter((movie) =>
+                getMovieCategories(movie).includes(category)
+              );
 
-              <section
-                className="movie-section"
-                key={category}
-              >
+              if (categoryMovies.length === 0) return null;
 
-                <h2 className="section-title">
-                  {category}
-                </h2>
+              return (
+                <section className="movie-section" key={category}>
+                  <h2 className="section-title">{category}</h2>
 
-                <div className="movie-row">
-
-                  {movies
-                    .filter(
-                      (movie) =>
-                        movie.category === category
-                    )
-                    .map((movie) => (
-
-                      <a
-                        href={`/watch/${movie._id}`}
-                        className="row-card"
-                        key={movie._id}
-                      >
-
-                        <img
-                          src={
-                            movie.image ||
-                            "https://via.placeholder.com/300x450"
-                          }
-                          alt={movie.title}
-                        />
-
-                        <div className="card-title">
-                          {movie.title}
-                        </div>
-
-                      </a>
+                  <div className="movie-row">
+                    {categoryMovies.map((movie) => (
+                      <MovieCard key={movie._id} movie={movie} />
                     ))}
-
-                </div>
-
-              </section>
-            ))}
+                  </div>
+                </section>
+              );
+            })}
           </>
         )}
-
       </main>
-
     </div>
+  );
+}
+
+function MovieCard({ movie }) {
+  return (
+    <Link href={`/movie/${movie._id}`} className="row-card">
+      {movie.image ? (
+        <img src={movie.image} alt={movie.title} />
+      ) : (
+        <div className="card-placeholder">Sem imagem</div>
+      )}
+
+      <div className="card-title">{movie.title}</div>
+    </Link>
   );
 }
