@@ -22,8 +22,13 @@ const emptyBulk = {
 };
 
 export default function Admin() {
+  const [activeTab, setActiveTab] = useState("content");
+
   const [movies, setMovies] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
+
+  const [users, setUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
 
   const [imdbId, setImdbId] = useState("");
   const [category, setCategory] = useState("");
@@ -41,6 +46,19 @@ export default function Admin() {
   const [deleteModal, setDeleteModal] = useState({
     open: false,
     movie: null,
+    loading: false
+  });
+
+  const [passwordModal, setPasswordModal] = useState({
+    open: false,
+    user: null,
+    newPassword: "",
+    loading: false
+  });
+
+  const [deleteUserModal, setDeleteUserModal] = useState({
+    open: false,
+    user: null,
     loading: false
   });
 
@@ -67,6 +85,7 @@ export default function Admin() {
     }
 
     loadMovies();
+    loadUsers();
   }, []);
 
   const loadMovies = async () => {
@@ -84,7 +103,18 @@ export default function Admin() {
       }
     } catch (err) {
       console.error(err);
-      showToast("Erro ao carregar itens", "error");
+      showToast("Erro ao carregar conteúdos", "error");
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const res = await API.get("/admin/users");
+
+      setUsers(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error(err);
+      showToast("Erro ao carregar usuários", "error");
     }
   };
 
@@ -96,6 +126,15 @@ export default function Admin() {
       movie.category?.toLowerCase().includes(search) ||
       movie.type?.toLowerCase().includes(search) ||
       movie.imdbId?.toLowerCase().includes(search)
+    );
+  });
+
+  const filteredUsers = users.filter((user) => {
+    const search = userSearch.toLowerCase();
+
+    return (
+      user.email?.toLowerCase().includes(search) ||
+      String(user.id).toLowerCase().includes(search)
     );
   });
 
@@ -370,6 +409,150 @@ export default function Admin() {
     }
   };
 
+  const togglePremium = async (user) => {
+    try {
+      await API.patch(`/admin/users/${user.id}/premium`, {
+        isPremium: !user.isPremium
+      });
+
+      showToast(
+        !user.isPremium ? "Premium ativado" : "Premium removido",
+        "success"
+      );
+
+      loadUsers();
+    } catch (err) {
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message || "Erro ao alterar premium",
+        "error"
+      );
+    }
+  };
+
+  const toggleAdmin = async (user) => {
+    try {
+      await API.patch(`/admin/users/${user.id}/admin`, {
+        isAdmin: !user.isAdmin
+      });
+
+      showToast(
+        !user.isAdmin ? "Admin ativado" : "Admin removido",
+        "success"
+      );
+
+      loadUsers();
+    } catch (err) {
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message || "Erro ao alterar admin",
+        "error"
+      );
+    }
+  };
+
+  const openPasswordModal = (user) => {
+    setPasswordModal({
+      open: true,
+      user,
+      newPassword: "",
+      loading: false
+    });
+  };
+
+  const closePasswordModal = () => {
+    if (passwordModal.loading) return;
+
+    setPasswordModal({
+      open: false,
+      user: null,
+      newPassword: "",
+      loading: false
+    });
+  };
+
+  const confirmResetPassword = async () => {
+    if (!passwordModal.newPassword || passwordModal.newPassword.length < 6) {
+      showToast("A senha precisa ter pelo menos 6 caracteres", "warning");
+      return;
+    }
+
+    try {
+      setPasswordModal((prev) => ({
+        ...prev,
+        loading: true
+      }));
+
+      await API.patch(`/admin/users/${passwordModal.user.id}/password`, {
+        newPassword: passwordModal.newPassword
+      });
+
+      showToast("Senha alterada com sucesso", "success");
+
+      closePasswordModal();
+    } catch (err) {
+      console.error(err);
+
+      setPasswordModal((prev) => ({
+        ...prev,
+        loading: false
+      }));
+
+      showToast(
+        err.response?.data?.message || "Erro ao alterar senha",
+        "error"
+      );
+    }
+  };
+
+  const openDeleteUserModal = (user) => {
+    setDeleteUserModal({
+      open: true,
+      user,
+      loading: false
+    });
+  };
+
+  const closeDeleteUserModal = () => {
+    if (deleteUserModal.loading) return;
+
+    setDeleteUserModal({
+      open: false,
+      user: null,
+      loading: false
+    });
+  };
+
+  const confirmDeleteUser = async () => {
+    try {
+      setDeleteUserModal((prev) => ({
+        ...prev,
+        loading: true
+      }));
+
+      await API.delete(`/admin/users/${deleteUserModal.user.id}`);
+
+      showToast("Usuário deletado", "success");
+
+      closeDeleteUserModal();
+      loadUsers();
+    } catch (err) {
+      console.error(err);
+
+      setDeleteUserModal((prev) => ({
+        ...prev,
+        loading: false
+      }));
+
+      showToast(
+        err.response?.data?.message || "Erro ao deletar usuário",
+        "error"
+      );
+    }
+  };
+
   const renderSourceForm = (server, index, updateFn, removeFn) => {
     return (
       <div className="source-box-custom" key={index}>
@@ -445,48 +628,60 @@ export default function Admin() {
       />
 
       {deleteModal.open && (
-        <div className="streaming-modal-overlay" onClick={closeDeleteModal}>
+        <ConfirmModal
+          tag="Confirmar exclusão"
+          title="Remover este conteúdo?"
+          text={`Você está prestes a deletar ${deleteModal.movie?.title}. Essa ação não pode ser desfeita.`}
+          loading={deleteModal.loading}
+          cancelText="Cancelar"
+          confirmText={deleteModal.loading ? "Deletando..." : "Deletar"}
+          onCancel={closeDeleteModal}
+          onConfirm={confirmDelete}
+        />
+      )}
+
+      {passwordModal.open && (
+        <div className="streaming-modal-overlay" onClick={closePasswordModal}>
           <div
             className="streaming-modal"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="modal-poster">
-              {deleteModal.movie?.image ? (
-                <img
-                  src={deleteModal.movie.image}
-                  alt={deleteModal.movie.title}
-                />
-              ) : (
-                <div className="modal-poster-placeholder">?</div>
-              )}
-            </div>
+            <div className="modal-poster-placeholder">🔑</div>
 
             <div className="modal-content">
-              <span className="modal-tag">Confirmar exclusão</span>
+              <span className="modal-tag">Resetar senha</span>
 
-              <h2>Remover este conteúdo?</h2>
+              <h2>{passwordModal.user?.email}</h2>
 
-              <p>
-                Você está prestes a deletar{" "}
-                <strong>{deleteModal.movie?.title}</strong> do catálogo.
-                Essa ação não pode ser desfeita.
-              </p>
+              <p>Digite a nova senha para este usuário.</p>
+
+              <input
+                type="password"
+                placeholder="Nova senha"
+                value={passwordModal.newPassword}
+                onChange={(e) =>
+                  setPasswordModal((prev) => ({
+                    ...prev,
+                    newPassword: e.target.value
+                  }))
+                }
+              />
 
               <div className="modal-actions">
                 <button
                   className="modal-cancel"
-                  onClick={closeDeleteModal}
-                  disabled={deleteModal.loading}
+                  onClick={closePasswordModal}
+                  disabled={passwordModal.loading}
                 >
                   Cancelar
                 </button>
 
                 <button
                   className="modal-delete"
-                  onClick={confirmDelete}
-                  disabled={deleteModal.loading}
+                  onClick={confirmResetPassword}
+                  disabled={passwordModal.loading}
                 >
-                  {deleteModal.loading ? "Deletando..." : "Deletar"}
+                  {passwordModal.loading ? "Salvando..." : "Alterar senha"}
                 </button>
               </div>
             </div>
@@ -494,251 +689,119 @@ export default function Admin() {
         </div>
       )}
 
+      {deleteUserModal.open && (
+        <ConfirmModal
+          tag="Confirmar exclusão"
+          title="Deletar usuário?"
+          text={`Você está prestes a deletar ${deleteUserModal.user?.email}. Essa ação não pode ser desfeita.`}
+          loading={deleteUserModal.loading}
+          cancelText="Cancelar"
+          confirmText={
+            deleteUserModal.loading ? "Deletando..." : "Deletar usuário"
+          }
+          onCancel={closeDeleteUserModal}
+          onConfirm={confirmDeleteUser}
+        />
+      )}
+
       <div className="admin-page-custom">
         <BackButton />
 
         <h1>Painel Admin</h1>
 
-        <section className="admin-card-custom">
-          <h2>Adicionar conteúdo via TMDB</h2>
+        <div className="admin-tabs-custom">
+          <button
+            className={activeTab === "content" ? "active" : ""}
+            onClick={() => setActiveTab("content")}
+          >
+            Conteúdo
+          </button>
 
-          <div className="form-grid-custom">
-            <input
-              placeholder="IMDb ID. Ex: tt2911666"
-              value={imdbId}
-              onChange={(e) => setImdbId(e.target.value)}
-            />
+          <button
+            className={activeTab === "users" ? "active" : ""}
+            onClick={() => setActiveTab("users")}
+          >
+            Usuários
+          </button>
+        </div>
 
-            <input
-              placeholder="Categoria"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              <option value="movie">Filme</option>
-              <option value="series">Série</option>
-              <option value="anime">Anime</option>
-            </select>
-
-            <label className="checkbox-custom">
-              <input
-                type="checkbox"
-                checked={featured}
-                onChange={(e) => setFeatured(e.target.checked)}
-              />
-              Marcar como destaque
-            </label>
-          </div>
-
-          {type === "movie" && (
-            <div className="source-box-custom">
-              <h3>Servidor inicial do filme</h3>
-
-              <input
-                placeholder="Nome do servidor"
-                value={source.name}
-                onChange={(e) =>
-                  updateSourceField("name", e.target.value)
-                }
-              />
-
-              <input
-                placeholder={
-                  source.type === "embed"
-                    ? "URL do embed/player externo"
-                    : "URL do vídeo .m3u8 ou .mp4"
-                }
-                value={source.url}
-                onChange={(e) =>
-                  updateSourceField("url", e.target.value)
-                }
-              />
+        {activeTab === "content" && (
+          <>
+            <section className="admin-card-custom">
+              <h2>Adicionar conteúdo via TMDB</h2>
 
               <div className="form-grid-custom">
-                <select
-                  value={source.type}
-                  onChange={(e) =>
-                    updateSourceField("type", e.target.value)
-                  }
-                >
-                  <option value="hls">HLS / m3u8</option>
-                  <option value="mp4">MP4</option>
-                  <option value="embed">Embed externo</option>
-                </select>
-
-                <select
-                  value={source.audio}
-                  onChange={(e) =>
-                    updateSourceField("audio", e.target.value)
-                  }
-                >
-                  <option value="dub">Dublado</option>
-                  <option value="leg">Legendado</option>
-                  <option value="original">Original</option>
-                </select>
+                <input
+                  placeholder="IMDb ID. Ex: tt2911666"
+                  value={imdbId}
+                  onChange={(e) => setImdbId(e.target.value)}
+                />
 
                 <input
-                  placeholder="Qualidade. Ex: 1080p ou Auto"
-                  value={source.quality}
-                  onChange={(e) =>
-                    updateSourceField("quality", e.target.value)
-                  }
+                  placeholder="Categoria"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
                 />
-              </div>
-            </div>
-          )}
 
-          <button className="primary-btn-custom" onClick={handleSubmit}>
-            Adicionar
-          </button>
-        </section>
-
-        <section className="admin-card-custom">
-          <h2>Conteúdo cadastrado</h2>
-
-          <input
-            placeholder="Buscar conteúdo"
-            value={adminSearch}
-            onChange={(e) => setAdminSearch(e.target.value)}
-          />
-
-          {filteredMovies.length === 0 && <p>Nenhum item encontrado</p>}
-
-          <div className="movie-list-custom">
-            {filteredMovies.map((movie) => (
-              <div className="movie-item-custom" key={movie._id}>
-                <div className="movie-info-custom">
-                  {movie.image && <img src={movie.image} alt={movie.title} />}
-
-                  <div>
-                    <strong>{movie.title}</strong>
-
-                    <p>
-                      {movie.category || "Sem categoria"} •{" "}
-                      {movie.type === "anime"
-                        ? "Anime"
-                        : movie.type === "series"
-                        ? "Série"
-                        : "Filme"}{" "}
-                      • {movie.featured ? "Destaque" : "Normal"} •{" "}
-                      {movie.imdbId}
-                    </p>
-
-                    <p>
-                      TMDB: {movie.tmdbId || "N/A"} • Servidores:{" "}
-                      {movie.sources?.length || 0} • Episódios:{" "}
-                      {movie.episodes?.length || 0}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="actions-custom">
-                  <button onClick={() => handleSelectMovie(movie)}>
-                    Gerenciar
-                  </button>
-
-                  <button
-                    className="danger-btn-custom"
-                    onClick={() => openDeleteModal(movie)}
-                  >
-                    Deletar
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {selectedMovie && (
-          <section className="admin-card-custom manage-card-custom">
-            <div className="manage-header-custom">
-              <div>
-                <span className="manage-tag-custom">Gerenciamento</span>
-                <h2>{selectedMovie.title}</h2>
-              </div>
-
-              <button
-                className="close-manage-btn-custom"
-                onClick={handleCloseManage}
-              >
-                Minimizar
-              </button>
-            </div>
-
-            {selectedMovie.type === "movie" && (
-              <>
-                <h3>Servidores do filme</h3>
-
-                {movieSources.map((server, index) =>
-                  renderSourceForm(
-                    server,
-                    index,
-                    updateMovieSourceField,
-                    removeMovieSource
-                  )
-                )}
-
-                <button onClick={addMovieSource}>Adicionar servidor</button>
-
-                <button
-                  className="primary-btn-custom"
-                  onClick={handleSaveMovieSources}
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
                 >
-                  Salvar servidores do filme
-                </button>
-              </>
-            )}
+                  <option value="movie">Filme</option>
+                  <option value="series">Série</option>
+                  <option value="anime">Anime</option>
+                </select>
 
-            {(selectedMovie.type === "series" ||
-              selectedMovie.type === "anime") && (
-              <>
-                <div className="bulk-box-custom">
-                  <h3>Aplicar servidor em todos os episódios</h3>
+                <label className="checkbox-custom">
+                  <input
+                    type="checkbox"
+                    checked={featured}
+                    onChange={(e) => setFeatured(e.target.checked)}
+                  />
+                  Marcar como destaque
+                </label>
+              </div>
 
-                  <p>
-                    Use variáveis no link:{" "}
-                    <strong>{"{tmdbId}"}</strong>,{" "}
-                    <strong>{"{season}"}</strong>,{" "}
-                    <strong>{"{episode}"}</strong>,{" "}
-                    <strong>{"{imdbId}"}</strong>
-                  </p>
+              {type === "movie" && (
+                <div className="source-box-custom">
+                  <h3>Servidor inicial do filme</h3>
 
                   <input
                     placeholder="Nome do servidor"
-                    value={bulkSource.name}
+                    value={source.name}
                     onChange={(e) =>
-                      updateBulkField("name", e.target.value)
+                      updateSourceField("name", e.target.value)
                     }
                   />
 
                   <input
-                    placeholder="Template da URL"
-                    value={bulkSource.urlTemplate}
+                    placeholder={
+                      source.type === "embed"
+                        ? "URL do embed/player externo"
+                        : "URL do vídeo .m3u8 ou .mp4"
+                    }
+                    value={source.url}
                     onChange={(e) =>
-                      updateBulkField("urlTemplate", e.target.value)
+                      updateSourceField("url", e.target.value)
                     }
                   />
 
                   <div className="form-grid-custom">
                     <select
-                      value={bulkSource.type}
+                      value={source.type}
                       onChange={(e) =>
-                        updateBulkField("type", e.target.value)
+                        updateSourceField("type", e.target.value)
                       }
                     >
-                      <option value="embed">Embed externo</option>
                       <option value="hls">HLS / m3u8</option>
                       <option value="mp4">MP4</option>
+                      <option value="embed">Embed externo</option>
                     </select>
 
                     <select
-                      value={bulkSource.audio}
+                      value={source.audio}
                       onChange={(e) =>
-                        updateBulkField("audio", e.target.value)
+                        updateSourceField("audio", e.target.value)
                       }
                     >
                       <option value="dub">Dublado</option>
@@ -747,101 +810,330 @@ export default function Admin() {
                     </select>
 
                     <input
-                      placeholder="Qualidade"
-                      value={bulkSource.quality}
+                      placeholder="Qualidade. Ex: 1080p ou Auto"
+                      value={source.quality}
                       onChange={(e) =>
-                        updateBulkField("quality", e.target.value)
+                        updateSourceField("quality", e.target.value)
                       }
                     />
+                  </div>
+                </div>
+              )}
 
-                    <select
-                      value={bulkSource.mode}
-                      onChange={(e) =>
-                        updateBulkField("mode", e.target.value)
-                      }
-                    >
-                      <option value="replace">
-                        Substituir servidores atuais
-                      </option>
-                      <option value="append">
-                        Adicionar sem apagar atuais
-                      </option>
-                    </select>
+              <button className="primary-btn-custom" onClick={handleSubmit}>
+                Adicionar
+              </button>
+            </section>
+
+            <section className="admin-card-custom">
+              <h2>Conteúdo cadastrado</h2>
+
+              <input
+                placeholder="Buscar conteúdo"
+                value={adminSearch}
+                onChange={(e) => setAdminSearch(e.target.value)}
+              />
+
+              {filteredMovies.length === 0 && <p>Nenhum item encontrado</p>}
+
+              <div className="movie-list-custom">
+                {filteredMovies.map((movie) => (
+                  <div className="movie-item-custom" key={movie._id}>
+                    <div className="movie-info-custom">
+                      {movie.image && <img src={movie.image} alt={movie.title} />}
+
+                      <div>
+                        <strong>{movie.title}</strong>
+
+                        <p>
+                          {movie.category || "Sem categoria"} •{" "}
+                          {movie.type === "anime"
+                            ? "Anime"
+                            : movie.type === "series"
+                            ? "Série"
+                            : "Filme"}{" "}
+                          • {movie.featured ? "Destaque" : "Normal"} •{" "}
+                          {movie.imdbId}
+                        </p>
+
+                        <p>
+                          TMDB: {movie.tmdbId || "N/A"} • Servidores:{" "}
+                          {movie.sources?.length || 0} • Episódios:{" "}
+                          {movie.episodes?.length || 0}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="actions-custom">
+                      <button onClick={() => handleSelectMovie(movie)}>
+                        Gerenciar
+                      </button>
+
+                      <button
+                        className="danger-btn-custom"
+                        onClick={() => openDeleteModal(movie)}
+                      >
+                        Deletar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {selectedMovie && (
+              <section className="admin-card-custom manage-card-custom">
+                <div className="manage-header-custom">
+                  <div>
+                    <span className="manage-tag-custom">Gerenciamento</span>
+                    <h2>{selectedMovie.title}</h2>
                   </div>
 
                   <button
-                    className="primary-btn-custom"
-                    onClick={handleBulkEpisodeSources}
+                    className="close-manage-btn-custom"
+                    onClick={handleCloseManage}
                   >
-                    Aplicar em todos os episódios
+                    Minimizar
                   </button>
                 </div>
 
-                <h3>Episódios</h3>
+                {selectedMovie.type === "movie" && (
+                  <>
+                    <h3>Servidores do filme</h3>
 
-                <input
-                  placeholder="Buscar episódio"
-                  value={episodeSearch}
-                  onChange={(e) => setEpisodeSearch(e.target.value)}
-                />
-
-                <div className="episodes-list-custom">
-                  {filteredEpisodes.map((episode) => (
-                    <button
-                      key={`${episode.seasonNumber}-${episode.episodeNumber}`}
-                      className={
-                        selectedEpisode?.seasonNumber ===
-                          episode.seasonNumber &&
-                        selectedEpisode?.episodeNumber ===
-                          episode.episodeNumber
-                          ? "episode-btn-custom active"
-                          : "episode-btn-custom"
-                      }
-                      onClick={() => handleSelectEpisode(episode)}
-                    >
-                      T{episode.seasonNumber} EP{episode.episodeNumber} -{" "}
-                      {episode.title}
-                      <br />
-                      Servidores: {episode.sources?.length || 0}
-                    </button>
-                  ))}
-                </div>
-
-                {selectedEpisode && (
-                  <div className="episode-editor-custom">
-                    <h3>
-                      Servidores: T{selectedEpisode.seasonNumber} EP
-                      {selectedEpisode.episodeNumber}
-                    </h3>
-
-                    {episodeSources.map((server, index) =>
+                    {movieSources.map((server, index) =>
                       renderSourceForm(
                         server,
                         index,
-                        updateEpisodeSourceField,
-                        removeEpisodeSource
+                        updateMovieSourceField,
+                        removeMovieSource
                       )
                     )}
 
-                    <button onClick={addEpisodeSource}>
-                      Adicionar servidor
-                    </button>
+                    <button onClick={addMovieSource}>Adicionar servidor</button>
 
                     <button
                       className="primary-btn-custom"
-                      onClick={handleSaveEpisodeSources}
+                      onClick={handleSaveMovieSources}
                     >
-                      Salvar servidores do episódio
+                      Salvar servidores do filme
+                    </button>
+                  </>
+                )}
+
+                {(selectedMovie.type === "series" ||
+                  selectedMovie.type === "anime") && (
+                  <>
+                    <div className="bulk-box-custom">
+                      <h3>Aplicar servidor em todos os episódios</h3>
+
+                      <p>
+                        Use variáveis no link: <strong>{"{tmdbId}"}</strong>,{" "}
+                        <strong>{"{season}"}</strong>,{" "}
+                        <strong>{"{episode}"}</strong>,{" "}
+                        <strong>{"{imdbId}"}</strong>
+                      </p>
+
+                      <input
+                        placeholder="Nome do servidor"
+                        value={bulkSource.name}
+                        onChange={(e) =>
+                          updateBulkField("name", e.target.value)
+                        }
+                      />
+
+                      <input
+                        placeholder="Template da URL"
+                        value={bulkSource.urlTemplate}
+                        onChange={(e) =>
+                          updateBulkField("urlTemplate", e.target.value)
+                        }
+                      />
+
+                      <div className="form-grid-custom">
+                        <select
+                          value={bulkSource.type}
+                          onChange={(e) =>
+                            updateBulkField("type", e.target.value)
+                          }
+                        >
+                          <option value="embed">Embed externo</option>
+                          <option value="hls">HLS / m3u8</option>
+                          <option value="mp4">MP4</option>
+                        </select>
+
+                        <select
+                          value={bulkSource.audio}
+                          onChange={(e) =>
+                            updateBulkField("audio", e.target.value)
+                          }
+                        >
+                          <option value="dub">Dublado</option>
+                          <option value="leg">Legendado</option>
+                          <option value="original">Original</option>
+                        </select>
+
+                        <input
+                          placeholder="Qualidade"
+                          value={bulkSource.quality}
+                          onChange={(e) =>
+                            updateBulkField("quality", e.target.value)
+                          }
+                        />
+
+                        <select
+                          value={bulkSource.mode}
+                          onChange={(e) =>
+                            updateBulkField("mode", e.target.value)
+                          }
+                        >
+                          <option value="replace">
+                            Substituir servidores atuais
+                          </option>
+                          <option value="append">
+                            Adicionar sem apagar atuais
+                          </option>
+                        </select>
+                      </div>
+
+                      <button
+                        className="primary-btn-custom"
+                        onClick={handleBulkEpisodeSources}
+                      >
+                        Aplicar em todos os episódios
+                      </button>
+                    </div>
+
+                    <h3>Episódios</h3>
+
+                    <input
+                      placeholder="Buscar episódio"
+                      value={episodeSearch}
+                      onChange={(e) => setEpisodeSearch(e.target.value)}
+                    />
+
+                    <div className="episodes-list-custom">
+                      {filteredEpisodes.map((episode) => (
+                        <button
+                          key={`${episode.seasonNumber}-${episode.episodeNumber}`}
+                          className={
+                            selectedEpisode?.seasonNumber ===
+                              episode.seasonNumber &&
+                            selectedEpisode?.episodeNumber ===
+                              episode.episodeNumber
+                              ? "episode-btn-custom active"
+                              : "episode-btn-custom"
+                          }
+                          onClick={() => handleSelectEpisode(episode)}
+                        >
+                          T{episode.seasonNumber} EP{episode.episodeNumber} -{" "}
+                          {episode.title}
+                          <br />
+                          Servidores: {episode.sources?.length || 0}
+                        </button>
+                      ))}
+                    </div>
+
+                    {selectedEpisode && (
+                      <div className="episode-editor-custom">
+                        <h3>
+                          Servidores: T{selectedEpisode.seasonNumber} EP
+                          {selectedEpisode.episodeNumber}
+                        </h3>
+
+                        {episodeSources.map((server, index) =>
+                          renderSourceForm(
+                            server,
+                            index,
+                            updateEpisodeSourceField,
+                            removeEpisodeSource
+                          )
+                        )}
+
+                        <button onClick={addEpisodeSource}>
+                          Adicionar servidor
+                        </button>
+
+                        <button
+                          className="primary-btn-custom"
+                          onClick={handleSaveEpisodeSources}
+                        >
+                          Salvar servidores do episódio
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
+          </>
+        )}
+
+        {activeTab === "users" && (
+          <section className="admin-card-custom">
+            <h2>Gerenciar usuários</h2>
+
+            <input
+              placeholder="Buscar usuário por email ou ID"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+            />
+
+            {filteredUsers.length === 0 && <p>Nenhum usuário encontrado</p>}
+
+            <div className="users-list-custom">
+              {filteredUsers.map((user) => (
+                <div className="user-item-custom" key={user.id}>
+                  <div className="user-profile-custom">
+                    <div className="user-avatar-custom">
+                      {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt={user.email} />
+                      ) : (
+                        <span>{user.email?.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <strong>{user.email}</strong>
+
+                      <p>
+                        {user.isPremium ? "Premium" : "Gratuito"} •{" "}
+                        {user.isAdmin ? "Admin" : "Usuário"} • Favoritos:{" "}
+                        {user.favoritesCount || 0}
+                      </p>
+
+                      <small>ID: {user.id}</small>
+                    </div>
+                  </div>
+
+                  <div className="actions-custom user-actions-custom">
+                    <button onClick={() => togglePremium(user)}>
+                      {user.isPremium ? "Remover premium" : "Dar premium"}
+                    </button>
+
+                    <button onClick={() => toggleAdmin(user)}>
+                      {user.isAdmin ? "Remover admin" : "Dar admin"}
+                    </button>
+
+                    <button onClick={() => openPasswordModal(user)}>
+                      Resetar senha
+                    </button>
+
+                    <button
+                      className="danger-btn-custom"
+                      onClick={() => openDeleteUserModal(user)}
+                    >
+                      Deletar
                     </button>
                   </div>
-                )}
-              </>
-            )}
+                </div>
+              ))}
+            </div>
           </section>
         )}
       </div>
 
-      <style jsx>{`
+      <style jsx global>{`
         .admin-page-custom {
           min-height: 100vh;
           background: #141414;
@@ -857,6 +1149,26 @@ export default function Admin() {
         h2,
         h3 {
           margin-bottom: 15px;
+        }
+
+        .admin-tabs-custom {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 25px;
+        }
+
+        .admin-tabs-custom button {
+          background: #242424;
+          color: white;
+          border: none;
+          padding: 13px 18px;
+          border-radius: 10px;
+          cursor: pointer;
+          font-weight: bold;
+        }
+
+        .admin-tabs-custom button.active {
+          background: #e50914;
         }
 
         .admin-card-custom {
@@ -901,10 +1213,6 @@ export default function Admin() {
           color: white;
           font-weight: bold;
           white-space: nowrap;
-        }
-
-        .close-manage-btn-custom:hover {
-          background: #666;
         }
 
         .form-grid-custom {
@@ -1011,14 +1319,16 @@ export default function Admin() {
           font-size: 14px;
         }
 
-        .movie-list-custom {
+        .movie-list-custom,
+        .users-list-custom {
           display: flex;
           flex-direction: column;
           gap: 12px;
           margin-top: 15px;
         }
 
-        .movie-item-custom {
+        .movie-item-custom,
+        .user-item-custom {
           background: #242424;
           border-radius: 14px;
           padding: 15px;
@@ -1027,7 +1337,8 @@ export default function Admin() {
           gap: 15px;
         }
 
-        .movie-info-custom {
+        .movie-info-custom,
+        .user-profile-custom {
           display: flex;
           align-items: center;
           gap: 15px;
@@ -1040,9 +1351,34 @@ export default function Admin() {
           border-radius: 8px;
         }
 
-        .movie-item-custom p {
+        .user-avatar-custom {
+          width: 60px;
+          height: 60px;
+          min-width: 60px;
+          border-radius: 14px;
+          overflow: hidden;
+          background: linear-gradient(135deg, #e50914, #7a0006);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 22px;
+        }
+
+        .user-avatar-custom img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .movie-item-custom p,
+        .user-item-custom p {
           color: #ccc;
           margin: 5px 0;
+        }
+
+        .user-item-custom small {
+          color: #888;
         }
 
         .actions-custom {
@@ -1050,6 +1386,10 @@ export default function Admin() {
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+        }
+
+        .user-actions-custom {
+          justify-content: flex-end;
         }
 
         .episodes-list-custom {
@@ -1099,26 +1439,13 @@ export default function Admin() {
           box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
         }
 
-        .modal-poster {
-          background: #0b0b0b;
-          min-height: 280px;
-        }
-
-        .modal-poster img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-
         .modal-poster-placeholder {
-          height: 100%;
+          background: linear-gradient(180deg, #7a0006, #2a0002);
+          min-height: 280px;
           display: flex;
           justify-content: center;
           align-items: center;
           font-size: 4rem;
-          color: #e50914;
-          font-weight: bold;
         }
 
         .modal-content {
@@ -1150,10 +1477,6 @@ export default function Admin() {
           margin-bottom: 24px;
         }
 
-        .modal-content strong {
-          color: white;
-        }
-
         .modal-actions {
           display: flex;
           gap: 12px;
@@ -1182,20 +1505,19 @@ export default function Admin() {
             padding: 12px;
           }
 
-          .manage-header-custom {
+          .admin-tabs-custom {
+            flex-direction: column;
+          }
+
+          .manage-header-custom,
+          .movie-item-custom,
+          .user-item-custom {
             flex-direction: column;
             align-items: stretch;
           }
 
-          .close-manage-btn-custom {
-            width: 100%;
-          }
-
-          .movie-item-custom {
-            flex-direction: column;
-          }
-
-          .movie-info-custom {
+          .movie-info-custom,
+          .user-profile-custom {
             align-items: flex-start;
           }
 
@@ -1213,8 +1535,8 @@ export default function Admin() {
             max-width: 420px;
           }
 
-          .modal-poster {
-            height: 210px;
+          .modal-poster-placeholder {
+            height: 180px;
             min-height: auto;
           }
 
@@ -1228,5 +1550,53 @@ export default function Admin() {
         }
       `}</style>
     </>
+  );
+}
+
+function ConfirmModal({
+  tag,
+  title,
+  text,
+  loading,
+  cancelText,
+  confirmText,
+  onCancel,
+  onConfirm
+}) {
+  return (
+    <div className="streaming-modal-overlay" onClick={onCancel}>
+      <div
+        className="streaming-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-poster-placeholder">⚠</div>
+
+        <div className="modal-content">
+          <span className="modal-tag">{tag}</span>
+
+          <h2>{title}</h2>
+
+          <p>{text}</p>
+
+          <div className="modal-actions">
+            <button
+              className="modal-cancel"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              {cancelText}
+            </button>
+
+            <button
+              className="modal-delete"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {confirmText}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

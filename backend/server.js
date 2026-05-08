@@ -6,18 +6,17 @@ const cors = require("cors");
 
 const app = express();
 
-/* MIDDLEWARES */
-
-app.use(cors({
-  origin: "http://localhost:3000",
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: "http://localhost:3000",
+    credentials: true
+  })
+);
 
 app.use(express.json());
 
-/* DATABASE */
-
-mongoose.connect(process.env.MONGO_URI)
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => {
     console.log("MongoDB conectado");
   })
@@ -25,41 +24,20 @@ mongoose.connect(process.env.MONGO_URI)
     console.log("Erro MongoDB:", err);
   });
 
-/* ROUTES */
-
 app.get("/", (req, res) => {
   res.json({
     message: "API do streaming rodando"
   });
 });
 
-app.use(
-  "/api/movies",
-  require("./routes/movies")
-);
+app.use("/api/movies", require("./routes/movies"));
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/admin/users", require("./routes/adminUsers"));
+app.use("/api/favorites", require("./routes/favorites"));
 
-app.use(
-  "/api/auth",
-  require("./routes/auth")
-);
-
-app.use(
-  "/api/admin",
-  require("./routes/admin")
-);
-
-app.use(
-  "/api/favorites",
-  require("./routes/favorites")
-);
-
-/* SERVER */
-
-const PORT =
-  process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(
-    `Servidor rodando na porta ${PORT}`
-  );
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
