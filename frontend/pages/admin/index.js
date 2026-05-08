@@ -28,6 +28,12 @@ export default function Admin() {
   const [episodeSources, setEpisodeSources] = useState([emptySource]);
   const [movieSources, setMovieSources] = useState([emptySource]);
 
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    movie: null,
+    loading: false
+  });
+
   const [toast, setToast] = useState({
     message: "",
     type: "info"
@@ -174,23 +180,56 @@ export default function Admin() {
     }
   };
 
-  const handleDelete = async (id) => {
-    const confirmed = window.confirm("Deseja realmente deletar?");
+  const openDeleteModal = (movie) => {
+    setDeleteModal({
+      open: true,
+      movie,
+      loading: false
+    });
+  };
 
-    if (!confirmed) return;
+  const closeDeleteModal = () => {
+    if (deleteModal.loading) return;
+
+    setDeleteModal({
+      open: false,
+      movie: null,
+      loading: false
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.movie) return;
 
     try {
-      await API.delete(`/admin/movies/${id}`);
+      setDeleteModal((prev) => ({
+        ...prev,
+        loading: true
+      }));
+
+      await API.delete(`/admin/movies/${deleteModal.movie._id}`);
 
       showToast("Item deletado", "success");
 
-      if (selectedMovie?._id === id) {
+      if (selectedMovie?._id === deleteModal.movie._id) {
         setSelectedMovie(null);
+        setSelectedEpisode(null);
       }
+
+      setDeleteModal({
+        open: false,
+        movie: null,
+        loading: false
+      });
 
       loadMovies();
     } catch (err) {
       console.error(err);
+
+      setDeleteModal((prev) => ({
+        ...prev,
+        loading: false
+      }));
 
       showToast(
         err.response?.data?.message || "Erro ao deletar",
@@ -271,15 +310,67 @@ export default function Admin() {
         }
       />
 
-      <div className="admin-page">
+      {deleteModal.open && (
+        <div className="streaming-modal-overlay" onClick={closeDeleteModal}>
+          <div
+            className="streaming-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-poster">
+              {deleteModal.movie?.image ? (
+                <img
+                  src={deleteModal.movie.image}
+                  alt={deleteModal.movie.title}
+                />
+              ) : (
+                <div className="modal-poster-placeholder">
+                  ?
+                </div>
+              )}
+            </div>
+
+            <div className="modal-content">
+              <span className="modal-tag">Confirmar exclusão</span>
+
+              <h2>Remover este conteúdo?</h2>
+
+              <p>
+                Você está prestes a deletar{" "}
+                <strong>{deleteModal.movie?.title}</strong> do catálogo.
+                Essa ação não pode ser desfeita.
+              </p>
+
+              <div className="modal-actions">
+                <button
+                  className="modal-cancel"
+                  onClick={closeDeleteModal}
+                  disabled={deleteModal.loading}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  className="modal-delete"
+                  onClick={confirmDelete}
+                  disabled={deleteModal.loading}
+                >
+                  {deleteModal.loading ? "Deletando..." : "Deletar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="admin-page-custom">
         <BackButton />
 
         <h1>Painel Admin</h1>
 
-        <section className="card">
+        <section className="admin-card-custom">
           <h2>Adicionar conteúdo via TMDB</h2>
 
-          <div className="form-grid">
+          <div className="form-grid-custom">
             <input
               placeholder="IMDb ID. Ex: tt2911666"
               value={imdbId}
@@ -301,7 +392,7 @@ export default function Admin() {
               <option value="anime">Anime</option>
             </select>
 
-            <label className="checkbox">
+            <label className="checkbox-custom">
               <input
                 type="checkbox"
                 checked={featured}
@@ -312,7 +403,7 @@ export default function Admin() {
           </div>
 
           {type === "movie" && (
-            <div className="source-box">
+            <div className="source-box-custom">
               <h3>Servidor inicial do filme</h3>
 
               <input
@@ -331,7 +422,7 @@ export default function Admin() {
                 }
               />
 
-              <div className="form-grid">
+              <div className="form-grid-custom">
                 <select
                   value={source.type}
                   onChange={(e) =>
@@ -364,12 +455,12 @@ export default function Admin() {
             </div>
           )}
 
-          <button className="primary-btn" onClick={handleSubmit}>
+          <button className="primary-btn-custom" onClick={handleSubmit}>
             Adicionar
           </button>
         </section>
 
-        <section className="card">
+        <section className="admin-card-custom">
           <h2>Conteúdo cadastrado</h2>
 
           <input
@@ -382,37 +473,43 @@ export default function Admin() {
             <p>Nenhum item encontrado</p>
           )}
 
-          <div className="movie-list">
+          <div className="movie-list-custom">
             {filteredMovies.map((movie) => (
-              <div className="movie-item" key={movie._id}>
-                <div>
-                  <strong>{movie.title}</strong>
+              <div className="movie-item-custom" key={movie._id}>
+                <div className="movie-info-custom">
+                  {movie.image && (
+                    <img src={movie.image} alt={movie.title} />
+                  )}
 
-                  <p>
-                    {movie.category || "Sem categoria"} •{" "}
-                    {movie.type === "anime"
-                      ? "Anime"
-                      : movie.type === "series"
-                      ? "Série"
-                      : "Filme"}{" "}
-                    • {movie.featured ? "Destaque" : "Normal"} •{" "}
-                    {movie.imdbId}
-                  </p>
+                  <div>
+                    <strong>{movie.title}</strong>
 
-                  <p>
-                    Servidores: {movie.sources?.length || 0} •
-                    Episódios: {movie.episodes?.length || 0}
-                  </p>
+                    <p>
+                      {movie.category || "Sem categoria"} •{" "}
+                      {movie.type === "anime"
+                        ? "Anime"
+                        : movie.type === "series"
+                        ? "Série"
+                        : "Filme"}{" "}
+                      • {movie.featured ? "Destaque" : "Normal"} •{" "}
+                      {movie.imdbId}
+                    </p>
+
+                    <p>
+                      Servidores: {movie.sources?.length || 0} •
+                      Episódios: {movie.episodes?.length || 0}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="actions">
+                <div className="actions-custom">
                   <button onClick={() => handleSelectMovie(movie)}>
                     Gerenciar
                   </button>
 
                   <button
-                    className="danger-btn"
-                    onClick={() => handleDelete(movie._id)}
+                    className="danger-btn-custom"
+                    onClick={() => openDeleteModal(movie)}
                   >
                     Deletar
                   </button>
@@ -423,7 +520,7 @@ export default function Admin() {
         </section>
 
         {selectedMovie && (
-          <section className="card">
+          <section className="admin-card-custom">
             <h2>Gerenciar: {selectedMovie.title}</h2>
 
             {selectedMovie.type === "movie" && (
@@ -431,7 +528,7 @@ export default function Admin() {
                 <h3>Servidores do filme</h3>
 
                 {movieSources.map((server, index) => (
-                  <div className="source-box" key={index}>
+                  <div className="source-box-custom" key={index}>
                     <input
                       placeholder="Nome do servidor"
                       value={server.name}
@@ -456,7 +553,7 @@ export default function Admin() {
                       }
                     />
 
-                    <div className="form-grid">
+                    <div className="form-grid-custom">
                       <select
                         value={server.type}
                         onChange={(e) =>
@@ -500,7 +597,7 @@ export default function Admin() {
                     </div>
 
                     <button
-                      className="danger-btn"
+                      className="danger-btn-custom"
                       onClick={() => removeMovieSource(index)}
                     >
                       Remover servidor
@@ -513,7 +610,7 @@ export default function Admin() {
                 </button>
 
                 <button
-                  className="primary-btn"
+                  className="primary-btn-custom"
                   onClick={handleSaveMovieSources}
                 >
                   Salvar servidores do filme
@@ -532,7 +629,7 @@ export default function Admin() {
                   onChange={(e) => setEpisodeSearch(e.target.value)}
                 />
 
-                <div className="episodes-list">
+                <div className="episodes-list-custom">
                   {filteredEpisodes.map((episode) => (
                     <button
                       key={`${episode.seasonNumber}-${episode.episodeNumber}`}
@@ -541,8 +638,8 @@ export default function Admin() {
                           episode.seasonNumber &&
                         selectedEpisode?.episodeNumber ===
                           episode.episodeNumber
-                          ? "episode-btn active"
-                          : "episode-btn"
+                          ? "episode-btn-custom active"
+                          : "episode-btn-custom"
                       }
                       onClick={() => handleSelectEpisode(episode)}
                     >
@@ -555,14 +652,14 @@ export default function Admin() {
                 </div>
 
                 {selectedEpisode && (
-                  <div className="episode-editor">
+                  <div className="episode-editor-custom">
                     <h3>
                       Servidores: T{selectedEpisode.seasonNumber} EP
                       {selectedEpisode.episodeNumber}
                     </h3>
 
                     {episodeSources.map((server, index) => (
-                      <div className="source-box" key={index}>
+                      <div className="source-box-custom" key={index}>
                         <input
                           placeholder="Nome do servidor"
                           value={server.name}
@@ -587,7 +684,7 @@ export default function Admin() {
                           }
                         />
 
-                        <div className="form-grid">
+                        <div className="form-grid-custom">
                           <select
                             value={server.type}
                             onChange={(e) =>
@@ -631,7 +728,7 @@ export default function Admin() {
                         </div>
 
                         <button
-                          className="danger-btn"
+                          className="danger-btn-custom"
                           onClick={() => removeEpisodeSource(index)}
                         >
                           Remover servidor
@@ -644,7 +741,7 @@ export default function Admin() {
                     </button>
 
                     <button
-                      className="primary-btn"
+                      className="primary-btn-custom"
                       onClick={handleSaveEpisodeSources}
                     >
                       Salvar servidores do episódio
@@ -658,27 +755,32 @@ export default function Admin() {
       </div>
 
       <style jsx>{`
-        .admin-page {
+        .admin-page-custom {
           min-height: 100vh;
           background: #141414;
           color: white;
-          padding: 25px;
+          padding: 30px;
         }
 
-        h1,
+        h1 {
+          color: #e50914;
+          margin-bottom: 25px;
+        }
+
         h2,
         h3 {
           margin-bottom: 15px;
         }
 
-        .card {
-          background: #1f1f1f;
-          padding: 20px;
-          border-radius: 12px;
+        .admin-card-custom {
+          background: #1b1b1b;
+          padding: 25px;
+          border-radius: 16px;
           margin-bottom: 25px;
+          box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
         }
 
-        .form-grid {
+        .form-grid-custom {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
           gap: 10px;
@@ -687,22 +789,30 @@ export default function Admin() {
         input,
         select {
           width: 100%;
-          background: #111;
+          background: #2b2b2b;
           color: white;
-          border: 1px solid #333;
-          padding: 12px;
+          border: none;
+          padding: 14px;
           border-radius: 8px;
           outline: none;
           margin-bottom: 10px;
         }
 
-        .checkbox {
+        input:focus,
+        select:focus {
+          box-shadow: 0 0 0 2px #e50914;
+        }
+
+        .checkbox-custom {
           display: flex;
           align-items: center;
           gap: 8px;
+          background: #242424;
+          padding: 14px;
+          border-radius: 8px;
         }
 
-        .checkbox input {
+        .checkbox-custom input {
           width: auto;
           margin: 0;
         }
@@ -711,99 +821,277 @@ export default function Admin() {
           background: #333;
           color: white;
           border: none;
-          padding: 10px 14px;
+          padding: 11px 15px;
           border-radius: 8px;
           cursor: pointer;
           margin: 5px 5px 5px 0;
+          transition: 0.2s;
         }
 
         button:hover {
-          opacity: 0.85;
+          opacity: 0.9;
+          transform: translateY(-1px);
         }
 
-        .primary-btn {
+        button:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .primary-btn-custom {
           background: #e50914;
           font-weight: bold;
         }
 
-        .danger-btn {
-          background: #8b0000;
+        .danger-btn-custom {
+          background: #b00020;
         }
 
-        .source-box {
+        .danger-btn-custom:hover {
+          background: #d00028;
+        }
+
+        .source-box-custom {
           background: #151515;
           border: 1px solid #333;
           padding: 15px;
-          border-radius: 10px;
+          border-radius: 12px;
           margin-bottom: 15px;
         }
 
-        .movie-list {
+        .movie-list-custom {
           display: flex;
           flex-direction: column;
           gap: 12px;
           margin-top: 15px;
         }
 
-        .movie-item {
-          background: #151515;
-          border-radius: 10px;
+        .movie-item-custom {
+          background: #242424;
+          border-radius: 14px;
           padding: 15px;
           display: flex;
           justify-content: space-between;
           gap: 15px;
         }
 
-        .movie-item p {
+        .movie-info-custom {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+
+        .movie-info-custom img {
+          width: 70px;
+          height: 100px;
+          object-fit: cover;
+          border-radius: 8px;
+        }
+
+        .movie-item-custom p {
           color: #ccc;
           margin: 5px 0;
         }
 
-        .actions {
+        .actions-custom {
           display: flex;
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
         }
 
-        .episodes-list {
+        .episodes-list-custom {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
           gap: 10px;
           margin: 15px 0;
         }
 
-        .episode-btn {
+        .episode-btn-custom {
           text-align: left;
           background: #151515;
           border: 1px solid #333;
+          width: 100%;
         }
 
-        .episode-btn.active {
+        .episode-btn-custom.active {
           background: #e50914;
           border-color: #e50914;
         }
 
-        .episode-editor {
+        .episode-editor-custom {
           margin-top: 20px;
         }
 
+        .streaming-modal-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 9998;
+          background: rgba(0, 0, 0, 0.78);
+          backdrop-filter: blur(8px);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 20px;
+          animation: modalFadeIn 0.18s ease;
+        }
+
+        .streaming-modal {
+          width: 100%;
+          max-width: 680px;
+          background: linear-gradient(135deg, #242424, #111);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 18px;
+          overflow: hidden;
+          display: grid;
+          grid-template-columns: 190px 1fr;
+          box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
+          animation: modalScaleIn 0.2s ease;
+        }
+
+        .modal-poster {
+          background: #0b0b0b;
+          min-height: 280px;
+        }
+
+        .modal-poster img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .modal-poster-placeholder {
+          height: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 4rem;
+          color: #e50914;
+          font-weight: bold;
+        }
+
+        .modal-content {
+          padding: 30px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+
+        .modal-tag {
+          width: fit-content;
+          background: #e50914;
+          color: white;
+          padding: 7px 12px;
+          border-radius: 999px;
+          font-size: 13px;
+          font-weight: bold;
+          margin-bottom: 15px;
+        }
+
+        .modal-content h2 {
+          font-size: 2rem;
+          margin-bottom: 12px;
+        }
+
+        .modal-content p {
+          color: #d0d0d0;
+          line-height: 1.6;
+          margin-bottom: 24px;
+        }
+
+        .modal-content strong {
+          color: white;
+        }
+
+        .modal-actions {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .modal-cancel,
+        .modal-delete {
+          flex: 1;
+          padding: 13px 16px;
+          font-weight: bold;
+          border-radius: 10px;
+          margin: 0;
+        }
+
+        .modal-cancel {
+          background: rgba(109, 109, 110, 0.7);
+        }
+
+        .modal-delete {
+          background: #e50914;
+        }
+
+        .modal-delete:hover {
+          background: #ff1f1f;
+        }
+
+        @keyframes modalFadeIn {
+          from {
+            opacity: 0;
+          }
+
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes modalScaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.94) translateY(15px);
+          }
+
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
         @media (max-width: 768px) {
-          .admin-page {
+          .admin-page-custom {
             padding: 12px;
           }
 
-          .movie-item {
+          .movie-item-custom {
             flex-direction: column;
           }
 
-          .actions {
+          .movie-info-custom {
+            align-items: flex-start;
+          }
+
+          .actions-custom {
             flex-direction: column;
             align-items: stretch;
           }
 
           button {
             width: 100%;
+          }
+
+          .streaming-modal {
+            grid-template-columns: 1fr;
+            max-width: 420px;
+          }
+
+          .modal-poster {
+            height: 210px;
+            min-height: auto;
+          }
+
+          .modal-content {
+            padding: 22px;
+          }
+
+          .modal-content h2 {
+            font-size: 1.5rem;
           }
         }
       `}</style>
