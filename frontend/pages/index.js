@@ -62,7 +62,7 @@ export default function Home() {
     <div className="home-page">
       <header className="header">
         <Link href="/" className="logo">
-          <h1>Streaming</h1>
+          <h1>Kyzo</h1>
         </Link>
 
         <div className="header-center">
