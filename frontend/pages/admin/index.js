@@ -12,6 +12,15 @@ const emptySource = {
   subtitles: []
 };
 
+const emptyBulk = {
+  name: "Videasy",
+  urlTemplate: "https://player.videasy.net/tv/{tmdbId}/{season}/{episode}",
+  type: "embed",
+  audio: "dub",
+  quality: "Auto",
+  mode: "replace"
+};
+
 export default function Admin() {
   const [movies, setMovies] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
@@ -27,6 +36,7 @@ export default function Admin() {
   const [episodeSearch, setEpisodeSearch] = useState("");
   const [episodeSources, setEpisodeSources] = useState([emptySource]);
   const [movieSources, setMovieSources] = useState([emptySource]);
+  const [bulkSource, setBulkSource] = useState(emptyBulk);
 
   const [deleteModal, setDeleteModal] = useState({
     open: false,
@@ -105,9 +115,16 @@ export default function Admin() {
       ...prev,
       [field]: value,
       quality:
-        field === "type" && value === "embed"
-          ? "Auto"
-          : prev.quality
+        field === "type" && value === "embed" ? "Auto" : prev.quality
+    }));
+  };
+
+  const updateBulkField = (field, value) => {
+    setBulkSource((prev) => ({
+      ...prev,
+      [field]: value,
+      quality:
+        field === "type" && value === "embed" ? "Auto" : prev.quality
     }));
   };
 
@@ -264,6 +281,7 @@ export default function Admin() {
     setSelectedMovie(movie);
     setSelectedEpisode(null);
     setEpisodeSearch("");
+    setBulkSource(emptyBulk);
 
     setMovieSources(
       movie.sources?.length ? movie.sources : [emptySource]
@@ -276,6 +294,7 @@ export default function Admin() {
     setEpisodeSearch("");
     setMovieSources([emptySource]);
     setEpisodeSources([emptySource]);
+    setBulkSource(emptyBulk);
   };
 
   const handleSelectEpisode = (episode) => {
@@ -327,6 +346,30 @@ export default function Admin() {
     }
   };
 
+  const handleBulkEpisodeSources = async () => {
+    try {
+      await API.put(
+        `/admin/movies/${selectedMovie._id}/episodes/bulk`,
+        bulkSource
+      );
+
+      showToast("Servidor aplicado em todos os episódios", "success");
+
+      setSelectedEpisode(null);
+      setEpisodeSources([emptySource]);
+
+      await loadMovies();
+    } catch (err) {
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message ||
+          "Erro ao aplicar servidor em massa",
+        "error"
+      );
+    }
+  };
+
   const renderSourceForm = (server, index, updateFn, removeFn) => {
     return (
       <div className="source-box-custom" key={index}>
@@ -368,9 +411,7 @@ export default function Admin() {
           <input
             placeholder="Qualidade"
             value={server.quality}
-            onChange={(e) =>
-              updateFn(index, "quality", e.target.value)
-            }
+            onChange={(e) => updateFn(index, "quality", e.target.value)}
           />
         </div>
 
@@ -549,13 +590,6 @@ export default function Admin() {
                   }
                 />
               </div>
-
-              {source.type === "embed" && (
-                <p className="embed-warning-custom">
-                  Para Videasy ou outro player externo, cole a URL completa
-                  do embed/player.
-                </p>
-              )}
             </div>
           )}
 
@@ -596,7 +630,8 @@ export default function Admin() {
                     </p>
 
                     <p>
-                      Servidores: {movie.sources?.length || 0} • Episódios:{" "}
+                      TMDB: {movie.tmdbId || "N/A"} • Servidores:{" "}
+                      {movie.sources?.length || 0} • Episódios:{" "}
                       {movie.episodes?.length || 0}
                     </p>
                   </div>
@@ -662,6 +697,87 @@ export default function Admin() {
             {(selectedMovie.type === "series" ||
               selectedMovie.type === "anime") && (
               <>
+                <div className="bulk-box-custom">
+                  <h3>Aplicar servidor em todos os episódios</h3>
+
+                  <p>
+                    Use variáveis no link:{" "}
+                    <strong>{"{tmdbId}"}</strong>,{" "}
+                    <strong>{"{season}"}</strong>,{" "}
+                    <strong>{"{episode}"}</strong>,{" "}
+                    <strong>{"{imdbId}"}</strong>
+                  </p>
+
+                  <input
+                    placeholder="Nome do servidor"
+                    value={bulkSource.name}
+                    onChange={(e) =>
+                      updateBulkField("name", e.target.value)
+                    }
+                  />
+
+                  <input
+                    placeholder="Template da URL"
+                    value={bulkSource.urlTemplate}
+                    onChange={(e) =>
+                      updateBulkField("urlTemplate", e.target.value)
+                    }
+                  />
+
+                  <div className="form-grid-custom">
+                    <select
+                      value={bulkSource.type}
+                      onChange={(e) =>
+                        updateBulkField("type", e.target.value)
+                      }
+                    >
+                      <option value="embed">Embed externo</option>
+                      <option value="hls">HLS / m3u8</option>
+                      <option value="mp4">MP4</option>
+                    </select>
+
+                    <select
+                      value={bulkSource.audio}
+                      onChange={(e) =>
+                        updateBulkField("audio", e.target.value)
+                      }
+                    >
+                      <option value="dub">Dublado</option>
+                      <option value="leg">Legendado</option>
+                      <option value="original">Original</option>
+                    </select>
+
+                    <input
+                      placeholder="Qualidade"
+                      value={bulkSource.quality}
+                      onChange={(e) =>
+                        updateBulkField("quality", e.target.value)
+                      }
+                    />
+
+                    <select
+                      value={bulkSource.mode}
+                      onChange={(e) =>
+                        updateBulkField("mode", e.target.value)
+                      }
+                    >
+                      <option value="replace">
+                        Substituir servidores atuais
+                      </option>
+                      <option value="append">
+                        Adicionar sem apagar atuais
+                      </option>
+                    </select>
+                  </div>
+
+                  <button
+                    className="primary-btn-custom"
+                    onClick={handleBulkEpisodeSources}
+                  >
+                    Aplicar em todos os episódios
+                  </button>
+                </div>
+
                 <h3>Episódios</h3>
 
                 <input
@@ -864,12 +980,26 @@ export default function Admin() {
           background: #d00028;
         }
 
-        .source-box-custom {
+        .source-box-custom,
+        .bulk-box-custom {
           background: #151515;
           border: 1px solid #333;
           padding: 15px;
           border-radius: 12px;
           margin-bottom: 15px;
+        }
+
+        .bulk-box-custom {
+          border-color: rgba(229, 9, 20, 0.45);
+        }
+
+        .bulk-box-custom p {
+          color: #ccc;
+          margin-bottom: 12px;
+        }
+
+        .bulk-box-custom strong {
+          color: white;
         }
 
         .embed-warning-custom {
@@ -956,7 +1086,6 @@ export default function Admin() {
           justify-content: center;
           align-items: center;
           padding: 20px;
-          animation: modalFadeIn 0.18s ease;
         }
 
         .streaming-modal {
@@ -969,7 +1098,6 @@ export default function Admin() {
           display: grid;
           grid-template-columns: 190px 1fr;
           box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
-          animation: modalScaleIn 0.2s ease;
         }
 
         .modal-poster {
@@ -1048,32 +1176,6 @@ export default function Admin() {
 
         .modal-delete {
           background: #e50914;
-        }
-
-        .modal-delete:hover {
-          background: #ff1f1f;
-        }
-
-        @keyframes modalFadeIn {
-          from {
-            opacity: 0;
-          }
-
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes modalScaleIn {
-          from {
-            opacity: 0;
-            transform: scale(0.94) translateY(15px);
-          }
-
-          to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-          }
         }
 
         @media (max-width: 768px) {

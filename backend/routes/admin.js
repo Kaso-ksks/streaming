@@ -18,9 +18,17 @@ function normalizeSource(source = {}) {
     url: source.url || "",
     type: source.type || "hls",
     audio: source.audio || "dub",
-    quality: source.quality || "1080p",
+    quality: source.quality || "Auto",
     subtitles: source.subtitles || []
   };
+}
+
+function buildEpisodeUrl(template, movie, episode) {
+  return template
+    .replaceAll("{tmdbId}", String(movie.tmdbId || ""))
+    .replaceAll("{imdbId}", String(movie.imdbId || ""))
+    .replaceAll("{season}", String(episode.seasonNumber))
+    .replaceAll("{episode}", String(episode.episodeNumber));
 }
 
 async function findByImdbId(imdbId) {
@@ -161,7 +169,6 @@ router.post("/movies", async (req, res) => {
     }
 
     const tmdbFind = await findByImdbId(imdbId);
-
     let movieData;
 
     if (type === "movie") {
@@ -229,7 +236,7 @@ router.put("/movies/:movieId/sources", async (req, res) => {
     }
 
     movie.sources = Array.isArray(sources)
-      ? sources.map(normalizeSource).filter((s) => s.url)
+      ? sources.map(normalizeSource).filter((source) => source.url)
       : [];
 
     await movie.save();
@@ -272,7 +279,7 @@ router.put("/movies/:movieId/episodes", async (req, res) => {
     }
 
     episode.sources = Array.isArray(sources)
-      ? sources.map(normalizeSource).filter((s) => s.url)
+      ? sources.map(normalizeSource).filter((source) => source.url)
       : [];
 
     await movie.save();
@@ -286,6 +293,72 @@ router.put("/movies/:movieId/episodes", async (req, res) => {
 
     res.status(500).json({
       message: "Erro ao atualizar episódio"
+    });
+  }
+});
+
+router.put("/movies/:movieId/episodes/bulk", async (req, res) => {
+  try {
+    const {
+      name = "Videasy",
+      urlTemplate,
+      type = "embed",
+      audio = "dub",
+      quality = "Auto",
+      mode = "replace"
+    } = req.body;
+
+    if (!urlTemplate) {
+      return res.status(400).json({
+        message: "Template de URL obrigatório"
+      });
+    }
+
+    const movie = await Movie.findById(req.params.movieId);
+
+    if (!movie) {
+      return res.status(404).json({
+        message: "Item não encontrado"
+      });
+    }
+
+    if (!movie.episodes?.length) {
+      return res.status(400).json({
+        message: "Esse item não possui episódios"
+      });
+    }
+
+    movie.episodes = movie.episodes.map((episode) => {
+      const url = buildEpisodeUrl(urlTemplate, movie, episode);
+
+      const source = normalizeSource({
+        name,
+        url,
+        type,
+        audio,
+        quality
+      });
+
+      if (mode === "append") {
+        episode.sources = [...(episode.sources || []), source];
+      } else {
+        episode.sources = [source];
+      }
+
+      return episode;
+    });
+
+    await movie.save();
+
+    res.json({
+      message: "Servidores aplicados em todos os episódios",
+      movie
+    });
+  } catch (err) {
+    console.log("Erro ao aplicar servidores em massa:", err);
+
+    res.status(500).json({
+      message: "Erro ao aplicar servidores em massa"
     });
   }
 });
