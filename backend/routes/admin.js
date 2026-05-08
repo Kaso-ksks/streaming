@@ -151,7 +151,9 @@ router.post("/movies", async (req, res) => {
     } = req.body;
 
     if (!imdbId) {
-      return res.status(400).json({ message: "IMDb ID obrigatório" });
+      return res.status(400).json({
+        message: "IMDb ID obrigatório"
+      });
     }
 
     if (!process.env.TMDB_API_KEY) {
@@ -169,6 +171,7 @@ router.post("/movies", async (req, res) => {
     }
 
     const tmdbFind = await findByImdbId(imdbId);
+
     let movieData;
 
     if (type === "movie") {

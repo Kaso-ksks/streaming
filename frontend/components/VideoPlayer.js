@@ -10,7 +10,11 @@ export default function VideoPlayer({
   const hlsRef = useRef(null);
 
   const [selectedServer, setSelectedServer] = useState(0);
-  const [audioType, setAudioType] = useState("dub");
+  const [audioType, setAudioType] = useState("all");
+
+  const availableAudios = [
+    ...new Set(sources.map((source) => source.audio).filter(Boolean))
+  ];
 
   const filteredSources =
     audioType === "all"
@@ -20,9 +24,23 @@ export default function VideoPlayer({
   const currentSource =
     filteredSources[selectedServer] || filteredSources[0];
 
+  const showAudioSelect = availableAudios.length > 1;
+  const showServerSelect = filteredSources.length > 1;
+  const showToolbar = showAudioSelect || showServerSelect;
+
+  useEffect(() => {
+    if (availableAudios.length === 1) {
+      setAudioType(availableAudios[0]);
+    } else {
+      setAudioType("all");
+    }
+
+    setSelectedServer(0);
+  }, [sources]);
+
   useEffect(() => {
     setSelectedServer(0);
-  }, [sources, audioType]);
+  }, [audioType]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -106,6 +124,13 @@ export default function VideoPlayer({
     }
   };
 
+  const audioLabel = (audio) => {
+    if (audio === "dub") return "Dublado";
+    if (audio === "leg") return "Legendado";
+    if (audio === "original") return "Original";
+    return audio;
+  };
+
   if (!sources.length) {
     return (
       <div className="custom-player-container">
@@ -147,45 +172,54 @@ export default function VideoPlayer({
         </video>
       )}
 
-      <div className="player-toolbar">
-        <div className="player-selects">
-          <select
-            value={audioType}
-            onChange={(e) => setAudioType(e.target.value)}
-          >
-            <option value="dub">Dublado</option>
-            <option value="leg">Legendado</option>
-            <option value="original">Original</option>
-            <option value="all">Todos</option>
-          </select>
+      {showToolbar && (
+        <div className="player-toolbar">
+          <div className="player-selects">
+            {showAudioSelect && (
+              <select
+                value={audioType}
+                onChange={(e) => setAudioType(e.target.value)}
+              >
+                <option value="all">Todos</option>
 
-          <select
-            value={selectedServer}
-            onChange={(e) =>
-              setSelectedServer(Number(e.target.value))
-            }
-          >
-            {filteredSources.map((server, index) => (
-              <option key={index} value={index}>
-                {server.name} •{" "}
-                {server.type === "embed"
-                  ? "Embed"
-                  : server.type.toUpperCase()}{" "}
-                • {server.quality}
-              </option>
-            ))}
-          </select>
+                {availableAudios.map((audio) => (
+                  <option key={audio} value={audio}>
+                    {audioLabel(audio)}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {showServerSelect && (
+              <select
+                value={selectedServer}
+                onChange={(e) =>
+                  setSelectedServer(Number(e.target.value))
+                }
+              >
+                {filteredSources.map((server, index) => (
+                  <option key={index} value={index}>
+                    {server.name} •{" "}
+                    {server.type === "embed"
+                      ? "Embed"
+                      : server.type.toUpperCase()}{" "}
+                    • {server.quality}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {currentSource?.type !== "embed" && (
+            <button
+              className="fullscreen-btn"
+              onClick={toggleFullscreen}
+            >
+              Fullscreen
+            </button>
+          )}
         </div>
-
-        {currentSource?.type !== "embed" && (
-          <button
-            className="fullscreen-btn"
-            onClick={toggleFullscreen}
-          >
-            Fullscreen
-          </button>
-        )}
-      </div>
+      )}
 
       <style jsx>{styles}</style>
     </div>

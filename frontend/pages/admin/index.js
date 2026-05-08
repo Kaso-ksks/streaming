@@ -417,8 +417,7 @@ export default function Admin() {
 
         {server.type === "embed" && (
           <p className="embed-warning-custom">
-            Use aqui links de players externos, como Videasy ou outro
-            iframe compatível.
+            Use aqui links de players externos, como Videasy ou outro iframe compatível.
           </p>
         )}
 
