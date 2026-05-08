@@ -1,6 +1,5 @@
 const router = require("express").Router();
 const axios = require("axios");
-
 const Movie = require("../models/Movie");
 const admin = require("../middleware/admin");
 
@@ -11,6 +10,17 @@ const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p";
 function imageUrl(path, size = "w500") {
   if (!path) return "";
   return `${TMDB_IMAGE_BASE}/${size}${path}`;
+}
+
+function normalizeSource(source = {}) {
+  return {
+    name: source.name || "Servidor 1",
+    url: source.url || "",
+    type: source.type || "hls",
+    audio: source.audio || "dub",
+    quality: source.quality || "1080p",
+    subtitles: source.subtitles || []
+  };
 }
 
 async function findByImdbId(imdbId) {
@@ -28,14 +38,14 @@ async function findByImdbId(imdbId) {
   return res.data;
 }
 
-async function getMovieFromTmdb(
+async function getMovieFromTmdb({
   tmdbId,
   imdbId,
   category,
   type,
   featured,
-  playerUrl
-) {
+  sources
+}) {
   const res = await axios.get(
     `https://api.themoviedb.org/3/movie/${tmdbId}`,
     {
@@ -58,19 +68,18 @@ async function getMovieFromTmdb(
     category: category || data.genres?.map((g) => g.name).join(", "),
     type,
     featured,
-    playerUrl: playerUrl || "",
+    sources,
     episodes: []
   };
 }
 
-async function getSeriesFromTmdb(
+async function getSeriesFromTmdb({
   tmdbId,
   imdbId,
   category,
   type,
-  featured,
-  playerUrl
-) {
+  featured
+}) {
   const res = await axios.get(
     `https://api.themoviedb.org/3/tv/${tmdbId}`,
     {
@@ -97,15 +106,13 @@ async function getSeriesFromTmdb(
       }
     );
 
-    const seasonData = seasonRes.data;
-
-    for (const ep of seasonData.episodes || []) {
+    for (const ep of seasonRes.data.episodes || []) {
       episodes.push({
         title: ep.name || `Episódio ${ep.episode_number}`,
         episodeNumber: ep.episode_number,
         seasonNumber: season.season_number,
         imdbId,
-        playerUrl: ""
+        sources: []
       });
     }
   }
@@ -120,7 +127,7 @@ async function getSeriesFromTmdb(
     category: category || data.genres?.map((g) => g.name).join(", "),
     type,
     featured,
-    playerUrl: playerUrl || "",
+    sources: [],
     episodes
   };
 }
@@ -130,15 +137,13 @@ router.post("/movies", async (req, res) => {
     const {
       imdbId,
       category,
-      type,
-      featured,
-      playerUrl
+      type = "movie",
+      featured = false,
+      source
     } = req.body;
 
     if (!imdbId) {
-      return res.status(400).json({
-        message: "IMDb ID obrigatório"
-      });
+      return res.status(400).json({ message: "IMDb ID obrigatório" });
     }
 
     if (!process.env.TMDB_API_KEY) {
@@ -168,14 +173,16 @@ router.post("/movies", async (req, res) => {
         });
       }
 
-      movieData = await getMovieFromTmdb(
-        movieResult.id,
+      const sources = source?.url ? [normalizeSource(source)] : [];
+
+      movieData = await getMovieFromTmdb({
+        tmdbId: movieResult.id,
         imdbId,
         category,
-        "movie",
-        !!featured,
-        playerUrl
-      );
+        type: "movie",
+        featured: !!featured,
+        sources
+      });
     } else {
       const tvResult = tmdbFind.tv_results?.[0];
 
@@ -185,14 +192,13 @@ router.post("/movies", async (req, res) => {
         });
       }
 
-      movieData = await getSeriesFromTmdb(
-        tvResult.id,
+      movieData = await getSeriesFromTmdb({
+        tmdbId: tvResult.id,
         imdbId,
         category,
         type,
-        !!featured,
-        playerUrl
-      );
+        featured: !!featured
+      });
     }
 
     const movie = await Movie.create(movieData);
@@ -210,13 +216,40 @@ router.post("/movies", async (req, res) => {
   }
 });
 
+router.put("/movies/:movieId/sources", async (req, res) => {
+  try {
+    const { sources } = req.body;
+
+    const movie = await Movie.findById(req.params.movieId);
+
+    if (!movie) {
+      return res.status(404).json({
+        message: "Item não encontrado"
+      });
+    }
+
+    movie.sources = Array.isArray(sources)
+      ? sources.map(normalizeSource).filter((s) => s.url)
+      : [];
+
+    await movie.save();
+
+    res.json({
+      message: "Servidores do filme atualizados",
+      movie
+    });
+  } catch (err) {
+    console.log("Erro ao atualizar servidores:", err);
+
+    res.status(500).json({
+      message: "Erro ao atualizar servidores"
+    });
+  }
+});
+
 router.put("/movies/:movieId/episodes", async (req, res) => {
   try {
-    const {
-      seasonNumber,
-      episodeNumber,
-      playerUrl
-    } = req.body;
+    const { seasonNumber, episodeNumber, sources } = req.body;
 
     const movie = await Movie.findById(req.params.movieId);
 
@@ -238,12 +271,14 @@ router.put("/movies/:movieId/episodes", async (req, res) => {
       });
     }
 
-    episode.playerUrl = playerUrl || "";
+    episode.sources = Array.isArray(sources)
+      ? sources.map(normalizeSource).filter((s) => s.url)
+      : [];
 
     await movie.save();
 
     res.json({
-      message: "Player do episódio atualizado",
+      message: "Servidores do episódio atualizados",
       episode
     });
   } catch (err) {

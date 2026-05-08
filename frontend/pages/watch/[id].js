@@ -1,112 +1,43 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import API from "../../services/api";
-import Toast from "../../components/Toast";
+import Link from "next/link";
+import VideoPlayer from "../../components/VideoPlayer";
 
-export default function Watch() {
+export default function WatchPage() {
   const router = useRouter();
   const { id } = router.query;
 
   const [movie, setMovie] = useState(null);
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [loading, setLoading] = useState(true);
+
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
-
-  const [toast, setToast] = useState({
-    message: "",
-    type: "info"
-  });
-
-  const showToast = (message, type = "info") => {
-    setToast({
-      message,
-      type
-    });
-  };
-
-  const isLogged =
-    typeof window !== "undefined" &&
-    localStorage.getItem("token");
 
   useEffect(() => {
     if (!id) return;
 
-    API.get(`/movies/${id}`)
-      .then((res) => {
-        setMovie(res.data);
+    fetch(`http://localhost:5000/api/movies/${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setMovie(data);
 
-        if (res.data.episodes?.length > 0) {
-          setSelectedEpisode(res.data.episodes[0]);
-          setSelectedSeason(res.data.episodes[0].seasonNumber);
+        if (
+          (data.type === "series" ||
+            data.type === "anime") &&
+          data.episodes?.length
+        ) {
+          setSelectedEpisode(data.episodes[0]);
         }
-      })
-      .catch((err) => console.error(err));
 
-    if (isLogged) {
-      API.get("/favorites")
-        .then((res) => {
-          const found = res.data.some((fav) => fav._id === id);
-          setIsFavorite(found);
-        })
-        .catch(() => setIsFavorite(false));
-    }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.log(err);
+        setLoading(false);
+      });
   }, [id]);
 
-  const handleFavorite = async () => {
-    if (!isLogged) {
-      showToast("Faça login para favoritar", "warning");
-
-      setTimeout(() => {
-        router.push("/login");
-      }, 1000);
-
-      return;
-    }
-
-    try {
-      if (isFavorite) {
-        await API.delete(`/favorites/${id}`);
-        setIsFavorite(false);
-        showToast("Removido dos favoritos", "info");
-      } else {
-        await API.post(`/favorites/${id}`);
-        setIsFavorite(true);
-        showToast("Adicionado aos favoritos", "success");
-      }
-    } catch (err) {
-      showToast(
-        err.response?.data?.message ||
-        "Erro ao favoritar",
-        "error"
-      );
-    }
-  };
-
-  const getPlayerUrl = () => {
-    if (!movie) return "";
-
-    if (
-      (movie.type === "series" || movie.type === "anime") &&
-      selectedEpisode
-    ) {
-      if (
-        selectedEpisode.playerUrl &&
-        selectedEpisode.playerUrl.trim() !== ""
-      ) {
-        return selectedEpisode.playerUrl;
-      }
-
-      return `https://www.vidking.net/embed/tv/${movie.imdbId}/${selectedEpisode.seasonNumber}/${selectedEpisode.episodeNumber}`;
-    }
-
-    if (movie.playerUrl && movie.playerUrl.trim() !== "") {
-      return movie.playerUrl;
-    }
-
-    return `https://www.vidking.net/embed/movie/${movie.imdbId}`;
-  };
-
-  if (!movie) {
+  if (loading) {
     return (
       <div className="loading">
         Carregando...
@@ -114,126 +45,221 @@ export default function Watch() {
     );
   }
 
-  const hasEpisodes =
-    movie.type === "series" ||
-    movie.type === "anime";
+  if (!movie) {
+    return (
+      <div className="loading">
+        Filme não encontrado
+      </div>
+    );
+  }
 
-  const seasons = [
-    ...new Set(
-      movie.episodes
-        ?.map((ep) => ep.seasonNumber)
-        .filter(Boolean)
-    )
-  ];
+  const groupedEpisodes = {};
 
-  const episodesBySeason =
-    movie.episodes?.filter(
-      (ep) => ep.seasonNumber === selectedSeason
-    ) || [];
+  movie.episodes?.forEach((ep) => {
+    if (!groupedEpisodes[ep.seasonNumber]) {
+      groupedEpisodes[ep.seasonNumber] = [];
+    }
+
+    groupedEpisodes[ep.seasonNumber].push(ep);
+  });
+
+  const currentSources =
+    movie.type === "movie"
+      ? movie.sources || []
+      : selectedEpisode?.sources || [];
 
   return (
-    <div className="watch-page">
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        onClose={() =>
-          setToast({
-            message: "",
-            type: "info"
-          })
-        }
-      />
+    <>
+      <div className="watch-page">
+        <div className="topbar">
+          <Link href="/">
+            <button>← Voltar</button>
+          </Link>
 
-      <div className="watch-header">
-        <button
-          className="back-button"
-          onClick={() => router.push("/")}
-        >
-          ← Voltar
-        </button>
-
-        <h1>{movie.title}</h1>
-
-        <button
-          className={
-            isFavorite
-              ? "favorite-button active"
-              : "favorite-button"
-          }
-          onClick={handleFavorite}
-        >
-          {isFavorite ? "❤️ Favoritado" : "🤍 Favoritar"}
-        </button>
-      </div>
-
-      <iframe
-        className="video-player"
-        src={getPlayerUrl()}
-        allowFullScreen
-      ></iframe>
-
-      <div className="movie-info">
-        <p>{movie.description}</p>
-
-        <span className="movie-category">
-          {movie.category}
-        </span>
-      </div>
-
-      {hasEpisodes && movie.episodes?.length > 0 && (
-        <div className="episodes-section">
-          <div className="episodes-header">
-            <h2>Episódios</h2>
-
-            <select
-              value={selectedSeason}
-              onChange={(e) => {
-                const season = Number(e.target.value);
-                setSelectedSeason(season);
-
-                const firstEpisode =
-                  movie.episodes.find(
-                    (ep) => ep.seasonNumber === season
-                  );
-
-                setSelectedEpisode(firstEpisode);
-              }}
-            >
-              {seasons.map((season) => (
-                <option
-                  key={season}
-                  value={season}
-                >
-                  Temporada {season}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="episodes-list">
-            {episodesBySeason.map((episode) => (
-              <button
-                key={`${episode.seasonNumber}-${episode.episodeNumber}`}
-                className={
-                  selectedEpisode?.seasonNumber === episode.seasonNumber &&
-                  selectedEpisode?.episodeNumber === episode.episodeNumber
-                    ? "episode-card active"
-                    : "episode-card"
-                }
-                onClick={() => setSelectedEpisode(episode)}
-              >
-                <strong>
-                  EP {episode.episodeNumber}
-                </strong>
-
-                <span>
-                  {episode.title}
-                </span>
-              </button>
-            ))}
-          </div>
+          <h1>{movie.title}</h1>
         </div>
-      )}
-    </div>
+
+        <div className="player-section">
+          <VideoPlayer
+            sources={currentSources}
+            title={
+              selectedEpisode
+                ? `${movie.title}-S${selectedEpisode.seasonNumber}E${selectedEpisode.episodeNumber}`
+                : movie.title
+            }
+          />
+        </div>
+
+        <div className="movie-info">
+          <h2>{movie.title}</h2>
+
+          <p>{movie.description}</p>
+        </div>
+
+        {(movie.type === "series" ||
+          movie.type === "anime") && (
+          <div className="episodes-section">
+            <div className="season-selector">
+              {Object.keys(groupedEpisodes).map(
+                (season) => (
+                  <button
+                    key={season}
+                    className={
+                      Number(season) === selectedSeason
+                        ? "active"
+                        : ""
+                    }
+                    onClick={() =>
+                      setSelectedSeason(Number(season))
+                    }
+                  >
+                    Temporada {season}
+                  </button>
+                )
+              )}
+            </div>
+
+            <div className="episodes-grid">
+              {groupedEpisodes[selectedSeason]?.map(
+                (episode) => (
+                  <button
+                    key={`${episode.seasonNumber}-${episode.episodeNumber}`}
+                    className={
+                      selectedEpisode?.episodeNumber ===
+                        episode.episodeNumber &&
+                      selectedEpisode?.seasonNumber ===
+                        episode.seasonNumber
+                        ? "episode active"
+                        : "episode"
+                    }
+                    onClick={() =>
+                      setSelectedEpisode(episode)
+                    }
+                  >
+                    EP {episode.episodeNumber}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`
+        .watch-page {
+          min-height: 100vh;
+          background: #141414;
+          color: white;
+          padding: 20px;
+        }
+
+        .topbar {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+          margin-bottom: 20px;
+        }
+
+        .topbar button {
+          background: #e50914;
+          color: white;
+          border: none;
+          padding: 10px 14px;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: bold;
+        }
+
+        .topbar h1 {
+          font-size: 1.8rem;
+        }
+
+        .player-section {
+          margin-bottom: 25px;
+        }
+
+        .movie-info {
+          margin-bottom: 30px;
+        }
+
+        .movie-info h2 {
+          font-size: 2rem;
+          margin-bottom: 10px;
+        }
+
+        .movie-info p {
+          color: #ccc;
+          line-height: 1.7;
+        }
+
+        .episodes-section {
+          margin-top: 30px;
+        }
+
+        .season-selector {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 20px;
+        }
+
+        .season-selector button {
+          background: #1f1f1f;
+          color: white;
+          border: none;
+          padding: 10px 16px;
+          border-radius: 8px;
+          cursor: pointer;
+        }
+
+        .season-selector button.active {
+          background: #e50914;
+        }
+
+        .episodes-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .episode {
+          background: #1f1f1f;
+          color: white;
+          border: none;
+          padding: 12px 16px;
+          border-radius: 8px;
+          cursor: pointer;
+        }
+
+        .episode.active {
+          background: #e50914;
+        }
+
+        .loading {
+          min-height: 100vh;
+          background: #141414;
+          color: white;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 2rem;
+        }
+
+        @media (max-width: 768px) {
+          .watch-page {
+            padding: 10px;
+          }
+
+          .topbar {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .movie-info h2 {
+            font-size: 1.5rem;
+          }
+        }
+      `}</style>
+    </>
   );
 }

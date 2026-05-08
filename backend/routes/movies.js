@@ -1,61 +1,54 @@
-const mongoose = require("mongoose");
+const router = require("express").Router();
+const Movie = require("../models/Movie");
 
-const EpisodeSchema = new mongoose.Schema({
-  title: String,
-  episodeNumber: Number,
-  seasonNumber: Number,
-  imdbId: String,
-  playerUrl: {
-    type: String,
-    default: ""
+router.get("/", async (req, res) => {
+  try {
+    const movies = await Movie.find().sort({ createdAt: -1 });
+
+    res.json(movies);
+  } catch (err) {
+    console.log("Erro ao buscar filmes:", err);
+
+    res.status(500).json({
+      message: "Erro ao buscar filmes"
+    });
   }
-}, {
-  _id: false
 });
 
-const MovieSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true
-  },
+router.get("/featured", async (req, res) => {
+  try {
+    const movies = await Movie.find({ featured: true }).sort({
+      createdAt: -1
+    });
 
-  description: {
-    type: String,
-    required: true
-  },
+    res.json(movies);
+  } catch (err) {
+    console.log("Erro ao buscar destaques:", err);
 
-  image: String,
-
-  banner: String,
-
-  imdbId: {
-    type: String,
-    required: true
-  },
-
-  tmdbId: Number,
-
-  category: String,
-
-  type: {
-    type: String,
-    enum: ["movie", "series", "anime"],
-    default: "movie"
-  },
-
-  featured: {
-    type: Boolean,
-    default: false
-  },
-
-  playerUrl: {
-    type: String,
-    default: ""
-  },
-
-  episodes: [EpisodeSchema]
-}, {
-  timestamps: true
+    res.status(500).json({
+      message: "Erro ao buscar destaques"
+    });
+  }
 });
 
-module.exports = mongoose.model("Movie", MovieSchema);
+router.get("/:id", async (req, res) => {
+  try {
+    const movie = await Movie.findById(req.params.id);
+
+    if (!movie) {
+      return res.status(404).json({
+        message: "Filme não encontrado"
+      });
+    }
+
+    res.json(movie);
+  } catch (err) {
+    console.log("Erro ao buscar filme:", err);
+
+    res.status(500).json({
+      message: "Erro ao buscar filme"
+    });
+  }
+});
+
+module.exports = router;
