@@ -1,30 +1,65 @@
 require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
 
 const app = express();
 
-app.use(helmet());
-app.use(express.json());
+/* MIDDLEWARES */
 
 app.use(cors({
-  origin: "http://localhost:3000"
+  origin: "http://localhost:3000",
+  credentials: true
 }));
 
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
-}));
+app.use(express.json());
+
+/* DATABASE */
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB conectado"))
-  .catch(console.log);
+  .then(() => {
+    console.log("MongoDB conectado");
+  })
+  .catch((err) => {
+    console.log("Erro MongoDB:", err);
+  });
 
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/movies", require("./routes/movies"));
-app.use("/api/admin", require("./routes/admin"));
+/* ROUTES */
 
-app.listen(5000, () => console.log("Rodando na porta 5000"));
+app.get("/", (req, res) => {
+  res.json({
+    message: "API do streaming rodando"
+  });
+});
+
+app.use(
+  "/api/movies",
+  require("./routes/movies")
+);
+
+app.use(
+  "/api/auth",
+  require("./routes/auth")
+);
+
+app.use(
+  "/api/admin",
+  require("./routes/admin")
+);
+
+app.use(
+  "/api/favorites",
+  require("./routes/favorites")
+);
+
+/* SERVER */
+
+const PORT =
+  process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(
+    `Servidor rodando na porta ${PORT}`
+  );
+});

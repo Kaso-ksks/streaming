@@ -1,9 +1,59 @@
 const mongoose = require("mongoose");
 
-const MovieSchema = new mongoose.Schema({
+const EpisodeSchema = new mongoose.Schema({
   title: String,
-  description: String,
-  videoUrl: String
+  episodeNumber: Number,
+  seasonNumber: Number,
+  imdbId: String
+}, {
+  _id: false
 });
 
-module.exports = mongoose.model("Movie", MovieSchema);
+const MovieSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    required: true
+  },
+
+  description: {
+    type: String,
+    required: true
+  },
+
+  image: String,
+
+  banner: String,
+
+  imdbId: {
+    type: String,
+    required: true
+  },
+
+  tmdbId: Number,
+
+  category: String,
+
+  type: {
+    type: String,
+    enum: ["movie", "series", "anime"],
+    default: "movie"
+  },
+
+  featured: {
+    type: Boolean,
+    default: false
+  },
+
+  playerUrl: {
+    type: String,
+    default: ""
+  },
+
+  episodes: [EpisodeSchema]
+}, {
+  timestamps: true
+});
+
+module.exports =
+  mongoose.models.Movie ||
+  mongoose.model("Movie", MovieSchema);
