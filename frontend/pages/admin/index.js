@@ -248,6 +248,14 @@ export default function Admin() {
     );
   };
 
+  const handleCloseManage = () => {
+    setSelectedMovie(null);
+    setSelectedEpisode(null);
+    setEpisodeSearch("");
+    setMovieSources([emptySource]);
+    setEpisodeSources([emptySource]);
+  };
+
   const handleSelectEpisode = (episode) => {
     setSelectedEpisode(episode);
 
@@ -323,9 +331,7 @@ export default function Admin() {
                   alt={deleteModal.movie.title}
                 />
               ) : (
-                <div className="modal-poster-placeholder">
-                  ?
-                </div>
+                <div className="modal-poster-placeholder">?</div>
               )}
             </div>
 
@@ -469,17 +475,13 @@ export default function Admin() {
             onChange={(e) => setAdminSearch(e.target.value)}
           />
 
-          {filteredMovies.length === 0 && (
-            <p>Nenhum item encontrado</p>
-          )}
+          {filteredMovies.length === 0 && <p>Nenhum item encontrado</p>}
 
           <div className="movie-list-custom">
             {filteredMovies.map((movie) => (
               <div className="movie-item-custom" key={movie._id}>
                 <div className="movie-info-custom">
-                  {movie.image && (
-                    <img src={movie.image} alt={movie.title} />
-                  )}
+                  {movie.image && <img src={movie.image} alt={movie.title} />}
 
                   <div>
                     <strong>{movie.title}</strong>
@@ -496,8 +498,8 @@ export default function Admin() {
                     </p>
 
                     <p>
-                      Servidores: {movie.sources?.length || 0} •
-                      Episódios: {movie.episodes?.length || 0}
+                      Servidores: {movie.sources?.length || 0} • Episódios:{" "}
+                      {movie.episodes?.length || 0}
                     </p>
                   </div>
                 </div>
@@ -520,8 +522,20 @@ export default function Admin() {
         </section>
 
         {selectedMovie && (
-          <section className="admin-card-custom">
-            <h2>Gerenciar: {selectedMovie.title}</h2>
+          <section className="admin-card-custom manage-card-custom">
+            <div className="manage-header-custom">
+              <div>
+                <span className="manage-tag-custom">Gerenciamento</span>
+                <h2>{selectedMovie.title}</h2>
+              </div>
+
+              <button
+                className="close-manage-btn-custom"
+                onClick={handleCloseManage}
+              >
+                Minimizar
+              </button>
+            </div>
 
             {selectedMovie.type === "movie" && (
               <>
@@ -533,11 +547,7 @@ export default function Admin() {
                       placeholder="Nome do servidor"
                       value={server.name}
                       onChange={(e) =>
-                        updateMovieSourceField(
-                          index,
-                          "name",
-                          e.target.value
-                        )
+                        updateMovieSourceField(index, "name", e.target.value)
                       }
                     />
 
@@ -545,11 +555,7 @@ export default function Admin() {
                       placeholder="URL .m3u8 ou .mp4"
                       value={server.url}
                       onChange={(e) =>
-                        updateMovieSourceField(
-                          index,
-                          "url",
-                          e.target.value
-                        )
+                        updateMovieSourceField(index, "url", e.target.value)
                       }
                     />
 
@@ -605,9 +611,7 @@ export default function Admin() {
                   </div>
                 ))}
 
-                <button onClick={addMovieSource}>
-                  Adicionar servidor
-                </button>
+                <button onClick={addMovieSource}>Adicionar servidor</button>
 
                 <button
                   className="primary-btn-custom"
@@ -643,8 +647,8 @@ export default function Admin() {
                       }
                       onClick={() => handleSelectEpisode(episode)}
                     >
-                      T{episode.seasonNumber} EP
-                      {episode.episodeNumber} - {episode.title}
+                      T{episode.seasonNumber} EP{episode.episodeNumber} -{" "}
+                      {episode.title}
                       <br />
                       Servidores: {episode.sources?.length || 0}
                     </button>
@@ -778,6 +782,46 @@ export default function Admin() {
           border-radius: 16px;
           margin-bottom: 25px;
           box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+        }
+
+        .manage-card-custom {
+          border: 1px solid rgba(229, 9, 20, 0.35);
+        }
+
+        .manage-header-custom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 15px;
+          margin-bottom: 20px;
+          border-bottom: 1px solid #333;
+          padding-bottom: 15px;
+        }
+
+        .manage-header-custom h2 {
+          margin-bottom: 0;
+        }
+
+        .manage-tag-custom {
+          display: inline-block;
+          background: #e50914;
+          color: white;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: bold;
+          margin-bottom: 8px;
+        }
+
+        .close-manage-btn-custom {
+          background: #444;
+          color: white;
+          font-weight: bold;
+          white-space: nowrap;
+        }
+
+        .close-manage-btn-custom:hover {
+          background: #666;
         }
 
         .form-grid-custom {
@@ -1057,6 +1101,15 @@ export default function Admin() {
         @media (max-width: 768px) {
           .admin-page-custom {
             padding: 12px;
+          }
+
+          .manage-header-custom {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .close-manage-btn-custom {
+            width: 100%;
           }
 
           .movie-item-custom {
