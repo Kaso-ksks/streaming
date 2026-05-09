@@ -4,10 +4,15 @@ import Hls from "hls.js";
 export default function VideoPlayer({
   sources = [],
   title = "",
-  autoPlay = true
+  autoPlay = true,
+  initialTime = 0,
+  onProgressUpdate,
+  onEnded
 }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
+  const lastSavedRef = useRef(0);
+  const initialAppliedRef = useRef(false);
 
   const [selectedServer, setSelectedServer] = useState(0);
   const [audioType, setAudioType] = useState("all");
@@ -36,10 +41,13 @@ export default function VideoPlayer({
     }
 
     setSelectedServer(0);
+    initialAppliedRef.current = false;
+    lastSavedRef.current = 0;
   }, [sources]);
 
   useEffect(() => {
     setSelectedServer(0);
+    initialAppliedRef.current = false;
   }, [audioType]);
 
   useEffect(() => {
@@ -52,6 +60,9 @@ export default function VideoPlayer({
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+
+    video.removeAttribute("src");
+    video.load();
 
     const isHls =
       currentSource.type === "hls" ||
@@ -75,42 +86,66 @@ export default function VideoPlayer({
       video.src = currentSource.url;
     }
 
+    const applyInitialTime = () => {
+      if (
+        initialAppliedRef.current ||
+        !initialTime ||
+        Number(initialTime) <= 5
+      ) {
+        return;
+      }
+
+      video.currentTime = Number(initialTime);
+      initialAppliedRef.current = true;
+    };
+
+    video.addEventListener("loadedmetadata", applyInitialTime);
+
     if (autoPlay) {
       video.play().catch(() => {});
     }
 
     return () => {
+      video.removeEventListener("loadedmetadata", applyInitialTime);
+
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [currentSource, autoPlay]);
+  }, [currentSource, autoPlay, initialTime]);
 
-  useEffect(() => {
-    if (!title || currentSource?.type === "embed") return;
+  const handleTimeUpdate = () => {
+    const video = videoRef.current;
 
-    const savedTime = localStorage.getItem(`watch-time-${title}`);
+    if (!video || !onProgressUpdate) return;
 
-    if (savedTime && videoRef.current) {
-      videoRef.current.currentTime = Number(savedTime);
+    const now = Date.now();
+
+    if (now - lastSavedRef.current < 5000) return;
+
+    lastSavedRef.current = now;
+
+    onProgressUpdate({
+      currentTime: video.currentTime || 0,
+      duration: video.duration || 0
+    });
+  };
+
+  const handleEnded = () => {
+    const video = videoRef.current;
+
+    if (onProgressUpdate && video) {
+      onProgressUpdate({
+        currentTime: video.duration || video.currentTime || 0,
+        duration: video.duration || 0
+      });
     }
-  }, [title, currentSource]);
 
-  useEffect(() => {
-    if (!title || currentSource?.type === "embed") return;
-
-    const interval = setInterval(() => {
-      if (videoRef.current) {
-        localStorage.setItem(
-          `watch-time-${title}`,
-          videoRef.current.currentTime
-        );
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [title, currentSource]);
+    if (onEnded) {
+      onEnded();
+    }
+  };
 
   const toggleFullscreen = () => {
     const player = videoRef.current;
@@ -159,6 +194,8 @@ export default function VideoPlayer({
           controls
           playsInline
           controlsList="nodownload"
+          onTimeUpdate={handleTimeUpdate}
+          onEnded={handleEnded}
         >
           {currentSource?.subtitles?.map((sub, index) => (
             <track

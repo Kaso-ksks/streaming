@@ -10,8 +10,10 @@ function safeUser(user) {
     id: user._id,
     email: user.email,
     avatarUrl: user.avatarUrl || "",
+    premiumBannerUrl: user.premiumBannerUrl || "",
     isPremium: user.isPremium,
     isAdmin: user.isAdmin,
+    profilesCount: user.profiles?.length || 0,
     favoritesCount: user.favorites?.length || 0,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
@@ -47,6 +49,15 @@ router.patch("/:id/premium", async (req, res) => {
     }
 
     user.isPremium = !!isPremium;
+
+    if (!user.isPremium) {
+      user.premiumBannerUrl = "";
+
+      if (user.profiles?.length > 1) {
+        user.profiles = [user.profiles[0]];
+        user.activeProfileId = user.profiles[0]._id;
+      }
+    }
 
     await user.save();
 

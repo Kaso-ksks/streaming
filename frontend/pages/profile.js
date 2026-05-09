@@ -4,11 +4,26 @@ import API from "../services/api";
 import BackButton from "../components/BackButton";
 import Toast from "../components/Toast";
 
+const emptyProfileForm = {
+  name: "",
+  avatarUrl: ""
+};
+
 export default function Profile() {
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [profileForm, setProfileForm] = useState(emptyProfileForm);
+
+  const [editProfileModal, setEditProfileModal] = useState({
+    open: false,
+    profile: null,
+    name: "",
+    avatarUrl: "",
+    saving: false
+  });
 
   const [deleteModal, setDeleteModal] = useState({
     open: false,
@@ -20,6 +35,7 @@ export default function Profile() {
   const [form, setForm] = useState({
     email: "",
     avatarUrl: "",
+    premiumBannerUrl: "",
     currentPassword: "",
     newPassword: "",
     confirmPassword: ""
@@ -49,19 +65,22 @@ export default function Profile() {
     loadFavorites();
   }, []);
 
+  const syncUser = (data) => {
+    setUser(data);
+    localStorage.setItem("user", JSON.stringify(data));
+
+    setForm((prev) => ({
+      ...prev,
+      email: data.email || "",
+      avatarUrl: data.avatarUrl || "",
+      premiumBannerUrl: data.premiumBannerUrl || ""
+    }));
+  };
+
   const loadProfile = async () => {
     try {
       const res = await API.get("/auth/me");
-
-      setUser(res.data);
-
-      setForm((prev) => ({
-        ...prev,
-        email: res.data.email || "",
-        avatarUrl: res.data.avatarUrl || ""
-      }));
-
-      localStorage.setItem("user", JSON.stringify(res.data));
+      syncUser(res.data);
     } catch (err) {
       console.error(err);
 
@@ -69,14 +88,7 @@ export default function Profile() {
 
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
-
-        setUser(parsedUser);
-
-        setForm((prev) => ({
-          ...prev,
-          email: parsedUser.email || "",
-          avatarUrl: parsedUser.avatarUrl || ""
-        }));
+        syncUser(parsedUser);
       }
     } finally {
       setLoaded(true);
@@ -86,7 +98,6 @@ export default function Profile() {
   const loadFavorites = async () => {
     try {
       const res = await API.get("/favorites");
-
       setFavorites(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
@@ -95,9 +106,24 @@ export default function Profile() {
   };
 
   const getInitial = () => {
-    if (!user?.email) return "?";
+    const name =
+      user?.activeProfile?.name ||
+      user?.email ||
+      "?";
 
-    return user.email.charAt(0).toUpperCase();
+    return name.charAt(0).toUpperCase();
+  };
+
+  const getAvatar = () => {
+    return (
+      user?.activeProfile?.avatarUrl ||
+      user?.avatarUrl ||
+      ""
+    );
+  };
+
+  const getDisplayName = () => {
+    return user?.activeProfile?.name || "Principal";
   };
 
   const handleChange = (field, value) => {
@@ -119,14 +145,14 @@ export default function Profile() {
       const payload = {
         email: form.email,
         avatarUrl: form.avatarUrl,
+        premiumBannerUrl: form.premiumBannerUrl,
         currentPassword: form.currentPassword,
         newPassword: form.newPassword
       };
 
       const res = await API.put("/auth/profile", payload);
 
-      setUser(res.data.user);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
+      syncUser(res.data.user);
 
       setForm((prev) => ({
         ...prev,
@@ -145,6 +171,137 @@ export default function Profile() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCreateProfile = async () => {
+    try {
+      if (!profileForm.name.trim()) {
+        showToast("Digite o nome do perfil", "warning");
+        return;
+      }
+
+      const res = await API.post("/auth/profiles", profileForm);
+
+      syncUser(res.data.user);
+      setProfileForm(emptyProfileForm);
+
+      showToast("Perfil criado", "success");
+    } catch (err) {
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message || "Erro ao criar perfil",
+        "error"
+      );
+    }
+  };
+
+  const handleActivateProfile = async (profileId) => {
+    try {
+      const res = await API.put(`/auth/profiles/${profileId}/active`);
+
+      syncUser(res.data.user);
+
+      await loadFavorites();
+
+      showToast("Perfil ativo alterado", "success");
+    } catch (err) {
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message || "Erro ao alterar perfil",
+        "error"
+      );
+    }
+  };
+
+  const openEditProfileModal = (profile) => {
+    setEditProfileModal({
+      open: true,
+      profile,
+      name: profile.name || "",
+      avatarUrl: profile.avatarUrl || "",
+      saving: false
+    });
+  };
+
+  const closeEditProfileModal = () => {
+    if (editProfileModal.saving) return;
+
+    setEditProfileModal({
+      open: false,
+      profile: null,
+      name: "",
+      avatarUrl: "",
+      saving: false
+    });
+  };
+
+  const handleSaveEditedProfile = async () => {
+    try {
+      if (!editProfileModal.profile) return;
+
+      if (!editProfileModal.name.trim()) {
+        showToast("Digite o nome do perfil", "warning");
+        return;
+      }
+
+      setEditProfileModal((prev) => ({
+        ...prev,
+        saving: true
+      }));
+
+      const res = await API.put(
+        `/auth/profiles/${editProfileModal.profile.id}`,
+        {
+          name: editProfileModal.name,
+          avatarUrl: editProfileModal.avatarUrl
+        }
+      );
+
+      syncUser(res.data.user);
+
+      setEditProfileModal({
+        open: false,
+        profile: null,
+        name: "",
+        avatarUrl: "",
+        saving: false
+      });
+
+      showToast("Perfil atualizado", "success");
+    } catch (err) {
+      console.error(err);
+
+      setEditProfileModal((prev) => ({
+        ...prev,
+        saving: false
+      }));
+
+      showToast(
+        err.response?.data?.message || "Erro ao editar perfil",
+        "error"
+      );
+    }
+  };
+
+  const handleDeleteProfile = async (profileId) => {
+    try {
+      const res = await API.delete(`/auth/profiles/${profileId}`);
+
+      syncUser(res.data.user);
+
+      await loadFavorites();
+
+      showToast("Perfil removido", "success");
+    } catch (err) {
+      console.error(err);
+
+      showToast(
+        err.response?.data?.message || "Erro ao remover perfil",
+        "error"
+      );
     }
   };
 
@@ -241,6 +398,12 @@ export default function Profile() {
     );
   }
 
+  const avatar = getAvatar();
+  const profileLimit = user.isPremium ? 5 : 1;
+  const favoriteLimitText = user.isPremium
+    ? "Ilimitados"
+    : `${favorites.length}/50`;
+
   return (
     <>
       <Toast
@@ -253,6 +416,72 @@ export default function Profile() {
           })
         }
       />
+
+      {editProfileModal.open && (
+        <div
+          className="streaming-modal-overlay"
+          onClick={closeEditProfileModal}
+        >
+          <div
+            className="streaming-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-edit-side">
+              <span>✏️</span>
+            </div>
+
+            <div className="modal-content">
+              <span className="modal-tag premium">
+                Editar perfil
+              </span>
+
+              <h2>{editProfileModal.profile?.name}</h2>
+
+              <p>Altere o nome e o avatar deste perfil.</p>
+
+              <input
+                placeholder="Nome do perfil"
+                value={editProfileModal.name}
+                onChange={(e) =>
+                  setEditProfileModal((prev) => ({
+                    ...prev,
+                    name: e.target.value
+                  }))
+                }
+              />
+
+              <input
+                placeholder="URL do avatar"
+                value={editProfileModal.avatarUrl}
+                onChange={(e) =>
+                  setEditProfileModal((prev) => ({
+                    ...prev,
+                    avatarUrl: e.target.value
+                  }))
+                }
+              />
+
+              <div className="modal-actions">
+                <button
+                  className="modal-cancel"
+                  onClick={closeEditProfileModal}
+                  disabled={editProfileModal.saving}
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  className="modal-save"
+                  onClick={handleSaveEditedProfile}
+                  disabled={editProfileModal.saving}
+                >
+                  {editProfileModal.saving ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteModal.open && (
         <div
@@ -354,18 +583,54 @@ export default function Profile() {
 
       <div className="profile-page-custom">
         <div className="profile-card-custom">
+          <div
+            className="premium-banner-profile"
+            style={{
+              backgroundImage:
+                user.isPremium && user.premiumBannerUrl
+                  ? `linear-gradient(90deg, rgba(0,0,0,.78), rgba(0,0,0,.25)), url(${user.premiumBannerUrl})`
+                  : user.isPremium
+                  ? "linear-gradient(135deg, #7a0006, #e50914)"
+                  : "linear-gradient(135deg, #242424, #151515)"
+            }}
+          >
+            <span>
+              {user.isPremium ? "👑 Premium ativo" : "Plano gratuito"}
+            </span>
+
+            <h2>{getDisplayName()}</h2>
+
+            <p>
+              {user.isPremium
+                ? "Favoritos ilimitados, até 5 perfis, avatar destacado e banner exclusivo."
+                : "Grátis: 50 favoritos e 1 perfil. Ative premium para desbloquear mais."}
+            </p>
+          </div>
+
           <div className="profile-header-custom">
-            <div className="profile-avatar-custom">
-              {form.avatarUrl ? (
-                <img src={form.avatarUrl} alt="Foto de perfil" />
+            <div
+              className={
+                user.isPremium
+                  ? "profile-avatar-custom premium"
+                  : "profile-avatar-custom"
+              }
+            >
+              {avatar ? (
+                <img src={avatar} alt="Foto de perfil" />
               ) : (
                 <span>{getInitial()}</span>
               )}
             </div>
 
             <div>
-              <span className="profile-tag-custom">
-                {user.isPremium ? "Premium" : "Gratuito"}
+              <span
+                className={
+                  user.isPremium
+                    ? "profile-tag-custom premium"
+                    : "profile-tag-custom"
+                }
+              >
+                {user.isPremium ? "👑 Premium" : "Gratuito"}
               </span>
 
               <h1>Meu Perfil</h1>
@@ -374,8 +639,98 @@ export default function Profile() {
             </div>
           </div>
 
+          <section className="profile-section-custom profiles-box">
+            <div className="section-row">
+              <div>
+                <h2>Perfis</h2>
+                <p>
+                  {user.profiles?.length || 0}/{profileLimit} perfis
+                </p>
+              </div>
+            </div>
+
+            <div className="profiles-list">
+              {user.profiles?.map((profile) => (
+                <div
+                  key={profile.id}
+                  className={
+                    String(profile.id) === String(user.activeProfileId)
+                      ? "mini-profile active"
+                      : "mini-profile"
+                  }
+                >
+                  <button
+                    className="mini-profile-main"
+                    onClick={() => handleActivateProfile(profile.id)}
+                  >
+                    <div className="mini-avatar">
+                      {profile.avatarUrl ? (
+                        <img src={profile.avatarUrl} alt={profile.name} />
+                      ) : (
+                        <span>{profile.name?.charAt(0).toUpperCase()}</span>
+                      )}
+                    </div>
+
+                    <strong>{profile.name}</strong>
+                  </button>
+
+                  <div className="mini-profile-actions">
+                    <button
+                      className="mini-edit"
+                      onClick={() => openEditProfileModal(profile)}
+                    >
+                      Editar
+                    </button>
+
+                    {user.profiles.length > 1 && (
+                      <button
+                        className="mini-remove"
+                        onClick={() => handleDeleteProfile(profile.id)}
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="profile-create-grid">
+              <input
+                placeholder="Nome do novo perfil"
+                value={profileForm.name}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    name: e.target.value
+                  }))
+                }
+              />
+
+              <input
+                placeholder="URL do avatar do perfil"
+                value={profileForm.avatarUrl}
+                onChange={(e) =>
+                  setProfileForm((prev) => ({
+                    ...prev,
+                    avatarUrl: e.target.value
+                  }))
+                }
+              />
+
+              <button onClick={handleCreateProfile}>
+                Criar perfil
+              </button>
+            </div>
+          </section>
+
           <section className="favorites-section-custom top-favorites">
-            <h2>❤️ Favoritos</h2>
+            <div className="section-row">
+              <div>
+                <h2>❤️ Favoritos</h2>
+                <p>Limite: {favoriteLimitText}</p>
+              </div>
+            </div>
 
             {favorites.length === 0 && (
               <p className="empty-favorites-custom">
@@ -420,7 +775,7 @@ export default function Profile() {
                 placeholder="Seu email"
               />
 
-              <label>URL da foto</label>
+              <label>URL da foto principal</label>
 
               <input
                 value={form.avatarUrl}
@@ -429,6 +784,20 @@ export default function Profile() {
                 }
                 placeholder="https://exemplo.com/foto.png"
               />
+
+              {user.isPremium && (
+                <>
+                  <label>Banner exclusivo premium</label>
+
+                  <input
+                    value={form.premiumBannerUrl}
+                    onChange={(e) =>
+                      handleChange("premiumBannerUrl", e.target.value)
+                    }
+                    placeholder="https://exemplo.com/banner.jpg"
+                  />
+                </>
+              )}
 
               <div className="account-info-custom">
                 <div>
@@ -526,12 +895,7 @@ const styles = `
     align-items: center;
     justify-content: center;
     padding: 35px;
-    background:
-      linear-gradient(
-        rgba(0, 0, 0, 0.6),
-        rgba(20, 20, 20, 1)
-      ),
-      #141414;
+    background: linear-gradient(rgba(0,0,0,.6), rgba(20,20,20,1)), #141414;
   }
 
   .profile-card-custom {
@@ -540,12 +904,46 @@ const styles = `
     background: #1b1b1b;
     border-radius: 18px;
     padding: 35px;
-    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 20px 70px rgba(0,0,0,.45);
   }
 
   .small-card {
     max-width: 450px;
     text-align: center;
+  }
+
+  .premium-banner-profile {
+    min-height: 185px;
+    border-radius: 18px;
+    padding: 28px;
+    margin-bottom: 28px;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  }
+
+  .premium-banner-profile span {
+    width: fit-content;
+    background: rgba(255,211,106,.95);
+    color: #1a1200;
+    padding: 8px 13px;
+    border-radius: 999px;
+    font-weight: bold;
+    margin-bottom: 12px;
+  }
+
+  .premium-banner-profile h2 {
+    font-size: 2.4rem;
+    margin-bottom: 8px;
+  }
+
+  .premium-banner-profile p {
+    color: #eee;
+    line-height: 1.5;
+    max-width: 650px;
   }
 
   .profile-header-custom {
@@ -565,8 +963,14 @@ const styles = `
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    background: linear-gradient(135deg, #e50914, #7a0006);
+    background: linear-gradient(135deg,#e50914,#7a0006);
     flex-shrink: 0;
+  }
+
+  .profile-avatar-custom.premium {
+    box-shadow:
+      0 0 0 3px #ffd36a,
+      0 0 35px rgba(255,211,106,.45);
   }
 
   .profile-avatar-custom img {
@@ -593,26 +997,33 @@ const styles = `
     margin-bottom: 10px;
   }
 
+  .profile-tag-custom.premium {
+    background: linear-gradient(135deg,#ffd36a,#b8860b);
+    color: #1a1200;
+  }
+
   .profile-header-custom h1 {
     font-size: 2.4rem;
     margin-bottom: 8px;
   }
 
-  .profile-header-custom p {
+  .profile-header-custom p,
+  .section-row p {
     color: #ccc;
   }
 
+  .section-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 18px;
+  }
+
+  .profiles-box,
   .top-favorites {
     margin-bottom: 28px;
     padding-bottom: 28px;
     border-bottom: 1px solid #333;
-  }
-
-  .profile-grid-custom {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
-    margin-bottom: 25px;
   }
 
   .profile-section-custom {
@@ -621,8 +1032,88 @@ const styles = `
     border-radius: 15px;
   }
 
-  .profile-section-custom h2 {
+  .profile-section-custom h2,
+  .favorites-section-custom h2 {
+    margin-bottom: 8px;
+  }
+
+  .profiles-list {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
     margin-bottom: 18px;
+  }
+
+  .mini-profile {
+    background: #151515;
+    border: 1px solid #333;
+    border-radius: 14px;
+    overflow: hidden;
+    min-width: 150px;
+  }
+
+  .mini-profile.active {
+    border-color: #e50914;
+  }
+
+  .mini-profile-main {
+    width: 100%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
+    border-radius: 0;
+  }
+
+  .mini-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(135deg,#e50914,#7a0006);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mini-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mini-profile-actions {
+    display: flex;
+  }
+
+  .mini-edit {
+    width: 100%;
+    flex: 1;
+    background: #2a2a2a;
+    border-radius: 0;
+    font-size: 12px;
+  }
+
+  .mini-remove {
+    width: 100%;
+    flex: 1;
+    background: #7a0006;
+    border-radius: 0;
+    font-size: 12px;
+  }
+
+  .profile-create-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 10px;
+  }
+
+  .profile-grid-custom {
+    display: grid;
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 20px;
+    margin-bottom: 25px;
   }
 
   label {
@@ -645,12 +1136,12 @@ const styles = `
 
   input:focus {
     border-color: #e50914;
-    box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.25);
+    box-shadow: 0 0 0 2px rgba(229,9,20,.25);
   }
 
   .account-info-custom {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2,1fr);
     gap: 12px;
     margin-top: 5px;
   }
@@ -668,10 +1159,6 @@ const styles = `
     margin-bottom: 5px;
   }
 
-  .account-info-custom strong {
-    color: white;
-  }
-
   .profile-actions-custom {
     display: flex;
     gap: 12px;
@@ -685,16 +1172,17 @@ const styles = `
     cursor: pointer;
     color: white;
     font-weight: bold;
-    transition: 0.2s;
+    transition: .2s;
+    background: #333;
   }
 
   button:hover {
-    opacity: 0.9;
+    opacity: .9;
     transform: translateY(-1px);
   }
 
   button:disabled {
-    opacity: 0.65;
+    opacity: .65;
     cursor: not-allowed;
     transform: none;
   }
@@ -714,10 +1202,6 @@ const styles = `
 
   .delete-account-btn-custom:hover {
     background: #a5000c;
-  }
-
-  .favorites-section-custom h2 {
-    margin-bottom: 20px;
   }
 
   .empty-favorites-custom {
@@ -748,7 +1232,7 @@ const styles = `
     overflow: hidden;
     text-decoration: none;
     color: white;
-    transition: 0.2s;
+    transition: .2s;
     display: block;
     flex-shrink: 0;
   }
@@ -779,7 +1263,6 @@ const styles = `
     font-weight: bold;
     font-size: 14px;
     color: white;
-    text-decoration: none;
   }
 
   .loading {
@@ -797,7 +1280,7 @@ const styles = `
     position: fixed;
     inset: 0;
     z-index: 9999;
-    background: rgba(0, 0, 0, 0.78);
+    background: rgba(0,0,0,.78);
     backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
@@ -808,23 +1291,32 @@ const styles = `
   .streaming-modal {
     width: 100%;
     max-width: 680px;
-    background: linear-gradient(135deg, #242424, #111);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: linear-gradient(135deg,#242424,#111);
+    border: 1px solid rgba(255,255,255,.08);
     border-radius: 18px;
     overflow: hidden;
     display: grid;
     grid-template-columns: 180px 1fr;
-    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.75);
+    box-shadow: 0 25px 80px rgba(0,0,0,.75);
   }
 
-  .modal-danger-side {
-    background: linear-gradient(180deg, #7a0006, #2a0002);
+  .modal-danger-side,
+  .modal-edit-side {
     display: flex;
     justify-content: center;
     align-items: center;
   }
 
-  .modal-danger-side span {
+  .modal-danger-side {
+    background: linear-gradient(180deg,#7a0006,#2a0002);
+  }
+
+  .modal-edit-side {
+    background: linear-gradient(180deg,#e50914,#7a0006);
+  }
+
+  .modal-danger-side span,
+  .modal-edit-side span {
     font-size: 5rem;
     color: white;
     font-weight: bold;
@@ -859,6 +1351,11 @@ const styles = `
     background: #e50914;
   }
 
+  .modal-tag.premium {
+    background: linear-gradient(135deg,#ffd36a,#b8860b);
+    color: #1a1200;
+  }
+
   .modal-actions {
     display: flex;
     gap: 12px;
@@ -866,7 +1363,8 @@ const styles = `
   }
 
   .modal-cancel,
-  .modal-delete {
+  .modal-delete,
+  .modal-save {
     flex: 1;
   }
 
@@ -878,7 +1376,12 @@ const styles = `
     background: #e50914;
   }
 
-  .modal-delete:hover {
+  .modal-save {
+    background: #e50914;
+  }
+
+  .modal-delete:hover,
+  .modal-save:hover {
     background: #ff1f1f;
   }
 
@@ -892,12 +1395,22 @@ const styles = `
       padding: 22px;
     }
 
+    .premium-banner-profile {
+      padding: 20px;
+      min-height: 150px;
+    }
+
+    .premium-banner-profile h2 {
+      font-size: 1.6rem;
+    }
+
     .profile-header-custom {
       flex-direction: column;
       align-items: flex-start;
     }
 
-    .profile-grid-custom {
+    .profile-grid-custom,
+    .profile-create-grid {
       grid-template-columns: 1fr;
     }
 
@@ -924,7 +1437,8 @@ const styles = `
       max-width: 430px;
     }
 
-    .modal-danger-side {
+    .modal-danger-side,
+    .modal-edit-side {
       height: 140px;
     }
 

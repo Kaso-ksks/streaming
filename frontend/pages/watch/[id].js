@@ -14,6 +14,7 @@ export default function WatchPage() {
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [initialTime, setInitialTime] = useState(0);
 
   const [toast, setToast] = useState({
     message: "",
@@ -30,6 +31,12 @@ export default function WatchPage() {
     loadMovie();
   }, [id]);
 
+  useEffect(() => {
+    if (!movie) return;
+
+    loadProgress();
+  }, [movie, selectedEpisode]);
+
   const loadMovie = async () => {
     try {
       setLoading(true);
@@ -43,6 +50,7 @@ export default function WatchPage() {
         (data.type === "series" || data.type === "anime") &&
         data.episodes?.length
       ) {
+        setSelectedSeason(data.episodes[0].seasonNumber || 1);
         setSelectedEpisode(data.episodes[0]);
       }
 
@@ -52,6 +60,55 @@ export default function WatchPage() {
       setMovie(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getProgressParams = () => {
+    if (!movie || movie.type === "movie") {
+      return {};
+    }
+
+    return {
+      seasonNumber: selectedEpisode?.seasonNumber || null,
+      episodeNumber: selectedEpisode?.episodeNumber || null
+    };
+  };
+
+  const loadProgress = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token || !movie) {
+      setInitialTime(0);
+      return;
+    }
+
+    try {
+      const params = getProgressParams();
+
+      const res = await API.get(`/progress/${movie._id}`, {
+        params
+      });
+
+      setInitialTime(Number(res.data?.currentTime || 0));
+    } catch (err) {
+      console.error(err);
+      setInitialTime(0);
+    }
+  };
+
+  const saveProgress = async ({ currentTime, duration }) => {
+    const token = localStorage.getItem("token");
+
+    if (!token || !movie) return;
+
+    try {
+      await API.put(`/progress/${movie._id}`, {
+        ...getProgressParams(),
+        currentTime,
+        duration
+      });
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -99,8 +156,8 @@ export default function WatchPage() {
 
       showToast(
         res.data.favorited
-          ? "Adicionado aos favoritos"
-          : "Removido dos favoritos",
+          ? "Adicionado aos favoritos deste perfil"
+          : "Removido dos favoritos deste perfil",
         res.data.favorited ? "success" : "info"
       );
     } catch (err) {
@@ -110,6 +167,48 @@ export default function WatchPage() {
         err.response?.data?.message || "Erro ao favoritar",
         "error"
       );
+    }
+  };
+
+  const goNextEpisode = () => {
+    if (!movie || movie.type === "movie" || !selectedEpisode) return;
+
+    const sameSeasonEpisodes = movie.episodes.filter(
+      (episode) =>
+        episode.seasonNumber === selectedEpisode.seasonNumber
+    );
+
+    const currentIndex = sameSeasonEpisodes.findIndex(
+      (episode) =>
+        episode.episodeNumber === selectedEpisode.episodeNumber
+    );
+
+    const nextInSeason = sameSeasonEpisodes[currentIndex + 1];
+
+    if (nextInSeason) {
+      setSelectedEpisode(nextInSeason);
+      showToast("Próximo episódio iniciado", "success");
+      return;
+    }
+
+    const nextSeason = Math.min(
+      ...movie.episodes
+        .map((episode) => episode.seasonNumber)
+        .filter(
+          (season) => season > selectedEpisode.seasonNumber
+        )
+    );
+
+    if (Number.isFinite(nextSeason)) {
+      const firstNextSeasonEpisode = movie.episodes.find(
+        (episode) => episode.seasonNumber === nextSeason
+      );
+
+      if (firstNextSeasonEpisode) {
+        setSelectedSeason(nextSeason);
+        setSelectedEpisode(firstNextSeasonEpisode);
+        showToast("Próxima temporada iniciada", "success");
+      }
     }
   };
 
@@ -136,6 +235,11 @@ export default function WatchPage() {
       ? movie.sources || []
       : selectedEpisode?.sources || [];
 
+  const playerKey =
+    movie.type === "movie"
+      ? movie._id
+      : `${movie._id}-${selectedEpisode?.seasonNumber}-${selectedEpisode?.episodeNumber}`;
+
   return (
     <>
       <Toast
@@ -157,7 +261,17 @@ export default function WatchPage() {
         </div>
 
         <div className="title-row">
-          <h1>{movie.title}</h1>
+          <div>
+            <h1>{movie.title}</h1>
+
+            {selectedEpisode && (
+              <p>
+                T{selectedEpisode.seasonNumber} EP
+                {selectedEpisode.episodeNumber} —{" "}
+                {selectedEpisode.title}
+              </p>
+            )}
+          </div>
 
           <button
             className={
@@ -173,7 +287,11 @@ export default function WatchPage() {
 
         <div className="player-section">
           <VideoPlayer
+            key={playerKey}
             sources={currentSources}
+            initialTime={initialTime}
+            onProgressUpdate={saveProgress}
+            onEnded={goNextEpisode}
             title={
               selectedEpisode
                 ? `${movie.title}-S${selectedEpisode.seasonNumber}E${selectedEpisode.episodeNumber}`
@@ -258,6 +376,11 @@ export default function WatchPage() {
 
         .title-row h1 {
           font-size: 2rem;
+        }
+
+        .title-row p {
+          color: #bbb;
+          margin-top: 6px;
         }
 
         .favorite-title-btn {

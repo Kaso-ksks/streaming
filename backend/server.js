@@ -78,6 +78,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/admin/users", require("./routes/adminUsers"));
 app.use("/api/favorites", require("./routes/favorites"));
+app.use("/api/progress", require("./routes/progress"));
 
 app.use((err, req, res, next) => {
   console.log("Erro global:", err.message);
