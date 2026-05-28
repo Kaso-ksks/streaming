@@ -1,14 +1,54 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import API from "../services/api";
+import NetflixBadge from "../components/NetflixBadge";
+import RandomButton from "../components/RandomButton";
 
 function getMovieCategories(movie) {
-  if (!movie.category) return [];
+  if (!movie.category) return ["Outros"];
 
   return movie.category
     .split(",")
     .map((category) => category.trim())
     .filter(Boolean);
+}
+
+function getMovieBadges(movie, index) {
+  const badges = [];
+
+  if (index < 10) badges.push("top10");
+  if (movie.featured) badges.push("popular");
+  if (movie.isPremium || movie.premiumOnly) badges.push("premium");
+
+  badges.push("hd");
+
+  return badges;
+}
+
+function buildUniqueCategorySections(movies) {
+  const usedMovieIds = new Set();
+  const categoryMap = {};
+
+  movies.forEach((movie) => {
+    const categories = getMovieCategories(movie);
+    const mainCategory = categories[0] || "Outros";
+
+    if (usedMovieIds.has(movie._id)) return;
+
+    if (!categoryMap[mainCategory]) {
+      categoryMap[mainCategory] = [];
+    }
+
+    categoryMap[mainCategory].push(movie);
+    usedMovieIds.add(movie._id);
+  });
+
+  return Object.keys(categoryMap)
+    .sort()
+    .map((category) => ({
+      category,
+      movies: categoryMap[category]
+    }));
 }
 
 function getProfileAvatar(user) {
@@ -27,7 +67,7 @@ export default function Home() {
 
   useEffect(() => {
     API.get("/movies")
-      .then((res) => setMovies(res.data))
+      .then((res) => setMovies(Array.isArray(res.data) ? res.data : []))
       .catch((err) => console.error("Erro ao buscar filmes:", err));
 
     loadUser();
@@ -92,11 +132,7 @@ export default function Home() {
     movie.title?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const categories = [
-    ...new Set(
-      filteredMovies.flatMap((movie) => getMovieCategories(movie))
-    )
-  ].sort();
+  const categorySections = buildUniqueCategorySections(filteredMovies);
 
   const avatarUrl = getProfileAvatar(user);
 
@@ -159,11 +195,7 @@ export default function Home() {
         <div className="header-buttons">
           {user ? (
             <>
-              {user.isPremium && (
-                <span className="premium-header-badge">
-                  👑 Premium
-                </span>
-              )}
+              {user.isPremium && <NetflixBadge type="premium" />}
 
               {user.isAdmin && <Link href="/admin">Admin</Link>}
 
@@ -199,13 +231,19 @@ export default function Home() {
           className="hero"
           style={{
             backgroundImage: `linear-gradient(
-              rgba(0,0,0,.45),
+              rgba(0,0,0,.35),
               rgba(20,20,20,1)
             ), url(${featuredMovie.banner || featuredMovie.image})`
           }}
         >
           <div className="hero-content">
-            <span className="hero-tag">Destaque</span>
+            <div className="hero-badges">
+              <NetflixBadge type="popular" />
+              <NetflixBadge type="hd" />
+              {(featuredMovie.isPremium || featuredMovie.premiumOnly) && (
+                <NetflixBadge type="premium" />
+              )}
+            </div>
 
             <h2>{featuredMovie.title}</h2>
 
@@ -219,12 +257,7 @@ export default function Home() {
                 ▶ Assistir
               </Link>
 
-              <Link
-                href={`/watch/${featuredMovie._id}`}
-                className="info-button"
-              >
-                Mais informações
-              </Link>
+              <RandomButton movies={movies} />
             </div>
           </div>
         </section>
@@ -237,11 +270,24 @@ export default function Home() {
               Resultados para "{search}"
             </h2>
 
-            <div className="movie-row">
-              {filteredMovies.map((movie) => (
-                <MovieCard key={movie._id} movie={movie} />
-              ))}
-            </div>
+            {filteredMovies.length === 0 ? (
+              <div className="empty-search-box">
+                <h3>Nada encontrado</h3>
+                <p>
+                  Tente buscar por outro título, série, anime ou categoria.
+                </p>
+              </div>
+            ) : (
+              <div className="movie-row">
+                {filteredMovies.map((movie, index) => (
+                  <MovieCard
+                    key={movie._id}
+                    movie={movie}
+                    index={index}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -251,17 +297,17 @@ export default function Home() {
               <h2 className="section-title">Todos</h2>
 
               <div className="movie-row">
-                {movies.map((movie) => (
-                  <MovieCard key={movie._id} movie={movie} />
+                {movies.map((movie, index) => (
+                  <MovieCard
+                    key={movie._id}
+                    movie={movie}
+                    index={index}
+                  />
                 ))}
               </div>
             </section>
 
-            {categories.map((category) => {
-              const categoryMovies = movies.filter((movie) =>
-                getMovieCategories(movie).includes(category)
-              );
-
+            {categorySections.map(({ category, movies: categoryMovies }) => {
               if (categoryMovies.length === 0) return null;
 
               return (
@@ -269,8 +315,12 @@ export default function Home() {
                   <h2 className="section-title">{category}</h2>
 
                   <div className="movie-row">
-                    {categoryMovies.map((movie) => (
-                      <MovieCard key={movie._id} movie={movie} />
+                    {categoryMovies.map((movie, index) => (
+                      <MovieCard
+                        key={movie._id}
+                        movie={movie}
+                        index={index}
+                      />
                     ))}
                   </div>
                 </section>
@@ -281,14 +331,11 @@ export default function Home() {
       </main>
 
       <style jsx>{`
-        .premium-header-badge {
-          background: linear-gradient(135deg, #ffd36a, #b8860b);
-          color: #1a1200;
-          padding: 9px 12px;
-          border-radius: 999px;
-          font-size: 13px;
-          font-weight: bold;
-          white-space: nowrap;
+        .hero-badges {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
         }
 
         .premium-avatar {
@@ -379,8 +426,24 @@ export default function Home() {
           transform: translateY(-1px);
         }
 
+        .empty-search-box {
+          background: #1b1b1b;
+          border: 1px solid #333;
+          border-radius: 16px;
+          padding: 28px;
+          color: white;
+        }
+
+        .empty-search-box h3 {
+          margin-bottom: 8px;
+        }
+
+        .empty-search-box p {
+          color: #aaa;
+        }
+
         @media (max-width: 768px) {
-          .premium-header-badge {
+          .header-buttons :global(.random-btn) {
             display: none;
           }
 
@@ -406,16 +469,39 @@ export default function Home() {
   );
 }
 
-function MovieCard({ movie }) {
-  return (
-    <Link href={`/watch/${movie._id}`} className="row-card">
-      {movie.image ? (
-        <img src={movie.image} alt={movie.title} />
-      ) : (
-        <div className="card-placeholder">Sem imagem</div>
-      )}
+function MovieCard({ movie, index }) {
+  const badges = getMovieBadges(movie, index);
 
-      <div className="card-title">{movie.title}</div>
-    </Link>
+  return (
+    <>
+      <Link href={`/watch/${movie._id}`} className="row-card">
+        <div className="card-badges">
+          {badges.slice(0, 2).map((badge) => (
+            <NetflixBadge key={badge} type={badge} />
+          ))}
+        </div>
+
+        {movie.image ? (
+          <img src={movie.image} alt={movie.title} />
+        ) : (
+          <div className="card-placeholder">Sem imagem</div>
+        )}
+
+        <div className="card-title">{movie.title}</div>
+      </Link>
+
+      <style jsx>{`
+        .card-badges {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          right: 10px;
+          z-index: 5;
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+      `}</style>
+    </>
   );
 }

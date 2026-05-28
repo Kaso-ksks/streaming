@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import API from "../../services/api";
 import Toast from "../../components/Toast";
 import BackButton from "../../components/BackButton";
@@ -21,20 +21,50 @@ const emptyBulk = {
   mode: "replace"
 };
 
+function normalizeText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getCategories(movie) {
+  if (!movie.category) return ["Sem categoria"];
+
+  return movie.category
+    .split(",")
+    .map((category) => category.trim())
+    .filter(Boolean);
+}
+
+function getBulkTemplate(movie) {
+  if (movie?.type === "anime") {
+    return "https://player.videasy.net/anime/{anilistId}/{episode}";
+  }
+
+  return "https://player.videasy.net/tv/{tmdbId}/{season}/{episode}";
+}
+
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState("content");
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   const [movies, setMovies] = useState([]);
   const [adminSearch, setAdminSearch] = useState("");
+
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   const [users, setUsers] = useState([]);
   const [userSearch, setUserSearch] = useState("");
 
   const [imdbId, setImdbId] = useState("");
+  const [anilistInput, setAnilistInput] = useState("");
   const [category, setCategory] = useState("");
   const [type, setType] = useState("movie");
   const [featured, setFeatured] = useState(false);
   const [source, setSource] = useState(emptySource);
+  const [tmdbError, setTmdbError] = useState("");
+  const [addingContent, setAddingContent] = useState(false);
 
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
@@ -86,13 +116,14 @@ export default function Admin() {
 
     loadMovies();
     loadUsers();
+    loadAnalytics();
   }, []);
 
   const loadMovies = async () => {
     try {
       const res = await API.get("/movies");
 
-      setMovies(res.data);
+      setMovies(Array.isArray(res.data) ? res.data : []);
 
       if (selectedMovie) {
         const updated = res.data.find(
@@ -118,35 +149,111 @@ export default function Admin() {
     }
   };
 
-  const filteredMovies = movies.filter((movie) => {
-    const search = adminSearch.toLowerCase();
+  const loadAnalytics = async () => {
+    try {
+      setAnalyticsLoading(true);
 
-    return (
-      movie.title?.toLowerCase().includes(search) ||
-      movie.category?.toLowerCase().includes(search) ||
-      movie.type?.toLowerCase().includes(search) ||
-      movie.imdbId?.toLowerCase().includes(search)
+      const res = await API.get("/admin/analytics");
+
+      setAnalytics(res.data);
+    } catch (err) {
+      console.error(err);
+      setAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    await loadMovies();
+    await loadUsers();
+    await loadAnalytics();
+  };
+
+  const categoryStats = useMemo(() => {
+    const map = {};
+
+    movies.forEach((movie) => {
+      getCategories(movie).forEach((item) => {
+        if (!map[item]) {
+          map[item] = 0;
+        }
+
+        map[item] += 1;
+      });
+    });
+
+    return Object.entries(map)
+      .map(([name, count]) => ({
+        name,
+        count
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [movies]);
+
+  const typeStats = useMemo(() => {
+    return {
+      movie: movies.filter((movie) => movie.type === "movie").length,
+      series: movies.filter((movie) => movie.type === "series").length,
+      anime: movies.filter((movie) => movie.type === "anime").length
+    };
+  }, [movies]);
+
+  const filteredMovies = movies.filter((movie) => {
+    const search = normalizeText(adminSearch);
+
+    const haystack = normalizeText(
+      [
+        movie.title,
+        movie.category,
+        movie.type,
+        movie.imdbId,
+        movie.tmdbId,
+        movie.featured ? "destaque" : "normal",
+        movie.sources?.length ? "com servidor" : "sem servidor",
+        movie.episodes?.length ? "com episodios" : "sem episodios"
+      ].join(" ")
     );
+
+    return haystack.includes(search);
   });
 
   const filteredUsers = users.filter((user) => {
-    const search = userSearch.toLowerCase();
+    const search = normalizeText(userSearch);
 
-    return (
-      user.email?.toLowerCase().includes(search) ||
-      String(user.id).toLowerCase().includes(search)
+    const haystack = normalizeText(
+      [
+        user.email,
+        user.id,
+        user.isPremium ? "premium" : "gratuito",
+        user.isAdmin ? "admin administrador" : "usuario comum",
+        `favoritos ${user.favoritesCount || 0}`,
+        `perfis ${user.profilesCount || 0}`,
+        user.createdAt
+          ? new Date(user.createdAt).toLocaleDateString("pt-BR")
+          : ""
+      ].join(" ")
     );
+
+    return haystack.includes(search);
   });
 
   const filteredEpisodes =
     selectedMovie?.episodes?.filter((episode) => {
-      const search = episodeSearch.toLowerCase();
+      const search = normalizeText(episodeSearch);
 
-      return (
-        episode.title?.toLowerCase().includes(search) ||
-        String(episode.seasonNumber).includes(search) ||
-        String(episode.episodeNumber).includes(search)
+      const haystack = normalizeText(
+        [
+          episode.title,
+          `temporada ${episode.seasonNumber}`,
+          `t${episode.seasonNumber}`,
+          `episodio ${episode.episodeNumber}`,
+          `ep${episode.episodeNumber}`,
+          `servidores ${episode.sources?.length || 0}`
+        ].join(" ")
       );
+
+      return haystack.includes(search);
     }) || [];
 
   const updateSourceField = (field, value) => {
@@ -231,9 +338,65 @@ export default function Admin() {
 
   const handleSubmit = async () => {
     try {
+      setTmdbError("");
+
+      if (type === "anime") {
+        if (!anilistInput.trim()) {
+          setTmdbError("Digite o ID do AniList ou o nome do anime.");
+          showToast("Digite o anime do AniList", "warning");
+          return;
+        }
+
+        setAddingContent(true);
+
+        const value = anilistInput.trim();
+        const isAniListId = /^\d+$/.test(value);
+
+        await API.post("/admin/anime", {
+          anilistId: isAniListId ? value : null,
+          search: isAniListId ? null : value,
+          category: category.trim(),
+          featured
+        });
+
+        showToast("Anime adicionado pelo AniList", "success");
+
+        setAnilistInput("");
+        setCategory("");
+        setType("movie");
+        setFeatured(false);
+        setSource(emptySource);
+        setTmdbError("");
+
+        await refreshAll();
+        return;
+      }
+
+      if (!imdbId.trim()) {
+        setTmdbError("Digite um IMDb ID antes de adicionar o conteúdo.");
+        showToast("Digite um IMDb ID", "warning");
+        return;
+      }
+
+      if (!imdbId.trim().startsWith("tt")) {
+        setTmdbError(
+          "O IMDb ID normalmente começa com tt. Exemplo: tt2911666."
+        );
+        showToast("IMDb ID parece inválido", "warning");
+        return;
+      }
+
+      if (!category.trim()) {
+        setTmdbError("Digite pelo menos uma categoria. Exemplo: Ação, Drama.");
+        showToast("Digite uma categoria", "warning");
+        return;
+      }
+
+      setAddingContent(true);
+
       await API.post("/admin/movies", {
-        imdbId,
-        category,
+        imdbId: imdbId.trim(),
+        category: category.trim(),
         type,
         featured,
         source: type === "movie" ? source : null
@@ -246,15 +409,22 @@ export default function Admin() {
       setType("movie");
       setFeatured(false);
       setSource(emptySource);
+      setTmdbError("");
 
-      loadMovies();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
-      showToast(
-        err.response?.data?.message || "Erro ao adicionar item",
-        "error"
-      );
+      const message =
+        err.response?.data?.message ||
+        (type === "anime"
+          ? "Erro ao adicionar anime pelo AniList."
+          : "Erro ao adicionar item. Verifique o IMDb ID, TMDB API Key e conexão do backend.");
+
+      setTmdbError(message);
+      showToast(message, "error");
+    } finally {
+      setAddingContent(false);
     }
   };
 
@@ -300,7 +470,7 @@ export default function Admin() {
         loading: false
       });
 
-      loadMovies();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -320,7 +490,11 @@ export default function Admin() {
     setSelectedMovie(movie);
     setSelectedEpisode(null);
     setEpisodeSearch("");
-    setBulkSource(emptyBulk);
+
+    setBulkSource({
+      ...emptyBulk,
+      urlTemplate: getBulkTemplate(movie)
+    });
 
     setMovieSources(
       movie.sources?.length ? movie.sources : [emptySource]
@@ -352,7 +526,7 @@ export default function Admin() {
 
       showToast("Servidores do filme salvos", "success");
 
-      loadMovies();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -373,7 +547,7 @@ export default function Admin() {
 
       showToast("Servidores do episódio salvos", "success");
 
-      loadMovies();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -397,7 +571,7 @@ export default function Admin() {
       setSelectedEpisode(null);
       setEpisodeSources([emptySource]);
 
-      await loadMovies();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -420,7 +594,7 @@ export default function Admin() {
         "success"
       );
 
-      loadUsers();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -442,7 +616,7 @@ export default function Admin() {
         "success"
       );
 
-      loadUsers();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -537,7 +711,7 @@ export default function Admin() {
       showToast("Usuário deletado", "success");
 
       closeDeleteUserModal();
-      loadUsers();
+      await refreshAll();
     } catch (err) {
       console.error(err);
 
@@ -613,6 +787,12 @@ export default function Admin() {
       </div>
     );
   };
+
+  const recentMovies = [...movies].slice(0, 6);
+  const premiumPercent =
+    analytics?.usersCount > 0
+      ? Math.round((analytics.premiumUsers / analytics.usersCount) * 100)
+      : 0;
 
   return (
     <>
@@ -707,9 +887,24 @@ export default function Admin() {
       <div className="admin-page-custom">
         <BackButton />
 
-        <h1>Painel Admin</h1>
+        <div className="admin-hero-custom">
+          <span className="admin-kicker-custom">KYZO ADMIN</span>
+
+          <h1>Painel Admin</h1>
+
+          <p>
+            Gerencie catálogo, usuários, servidores, categorias e acompanhe métricas gerais.
+          </p>
+        </div>
 
         <div className="admin-tabs-custom">
+          <button
+            className={activeTab === "dashboard" ? "active" : ""}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            Dashboard
+          </button>
+
           <button
             className={activeTab === "content" ? "active" : ""}
             onClick={() => setActiveTab("content")}
@@ -725,27 +920,244 @@ export default function Admin() {
           </button>
         </div>
 
+        {activeTab === "dashboard" && (
+          <>
+            <section className="analytics-grid-custom">
+              <AnalyticsCard
+                title="Conteúdos"
+                value={analytics?.totalContent ?? movies.length}
+                description="Total cadastrado"
+                loading={analyticsLoading}
+              />
+
+              <AnalyticsCard
+                title="Filmes"
+                value={analytics?.moviesCount ?? typeStats.movie}
+                description="Tipo filme"
+                loading={analyticsLoading}
+              />
+
+              <AnalyticsCard
+                title="Séries"
+                value={analytics?.seriesCount ?? typeStats.series}
+                description="Tipo série"
+                loading={analyticsLoading}
+              />
+
+              <AnalyticsCard
+                title="Animes"
+                value={analytics?.animeCount ?? typeStats.anime}
+                description="Tipo anime"
+                loading={analyticsLoading}
+              />
+
+              <AnalyticsCard
+                title="Usuários"
+                value={analytics?.usersCount ?? users.length}
+                description="Contas cadastradas"
+                loading={analyticsLoading}
+              />
+
+              <AnalyticsCard
+                title="Premium"
+                value={analytics?.premiumUsers ?? "-"}
+                description={`${premiumPercent}% da base`}
+                loading={analyticsLoading}
+                premium
+              />
+
+              <AnalyticsCard
+                title="Perfis"
+                value={analytics?.totalProfiles ?? "-"}
+                description="Perfis criados"
+                loading={analyticsLoading}
+              />
+
+              <AnalyticsCard
+                title="Favoritos"
+                value={analytics?.totalFavorites ?? "-"}
+                description="Total favoritado"
+                loading={analyticsLoading}
+              />
+            </section>
+
+            <section className="admin-card-custom dashboard-card-custom">
+              <div className="dashboard-main-custom">
+                <div>
+                  <span className="manage-tag-custom">Resumo</span>
+
+                  <h2>Status da plataforma</h2>
+
+                  <p>
+                    {analytics
+                      ? "Analytics carregado com sucesso."
+                      : "Se os números não aparecerem, confira se a rota /api/admin/analytics está registrada no backend."}
+                  </p>
+                </div>
+
+                <button className="primary-btn-custom" onClick={refreshAll}>
+                  Atualizar dados
+                </button>
+              </div>
+
+              <div className="dashboard-split-custom">
+                <div className="dashboard-panel-custom">
+                  <h3>Conteúdos recentes</h3>
+
+                  {recentMovies.length === 0 && (
+                    <p>Nenhum conteúdo cadastrado ainda.</p>
+                  )}
+
+                  {recentMovies.map((movie) => (
+                    <div className="dashboard-row-custom" key={movie._id}>
+                      {movie.image ? (
+                        <img src={movie.image} alt={movie.title} />
+                      ) : (
+                        <div className="dashboard-placeholder-custom" />
+                      )}
+
+                      <div>
+                        <strong>{movie.title}</strong>
+
+                        <p>
+                          {movie.type === "anime"
+                            ? "Anime"
+                            : movie.type === "series"
+                            ? "Série"
+                            : "Filme"}{" "}
+                          • {movie.category || "Sem categoria"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="dashboard-panel-custom">
+                  <h3>Usuários recentes</h3>
+
+                  {users.slice(0, 6).length === 0 && (
+                    <p>Nenhum usuário encontrado.</p>
+                  )}
+
+                  {users.slice(0, 6).map((user) => (
+                    <div className="dashboard-user-custom" key={user.id}>
+                      <div className="dashboard-avatar-custom">
+                        {user.avatarUrl ? (
+                          <img src={user.avatarUrl} alt={user.email} />
+                        ) : (
+                          <span>{user.email?.charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+
+                      <div>
+                        <strong>{user.email}</strong>
+
+                        <p>
+                          {user.isPremium ? "Premium" : "Gratuito"} •{" "}
+                          {user.isAdmin ? "Admin" : "Usuário"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="admin-card-custom">
+              <div className="category-header-custom">
+                <div>
+                  <span className="manage-tag-custom">Categorias</span>
+                  <h2>Contador por categoria</h2>
+                </div>
+
+                <strong>{categoryStats.length} categorias</strong>
+              </div>
+
+              {categoryStats.length === 0 && (
+                <p>Nenhuma categoria encontrada.</p>
+              )}
+
+              {categoryStats.length > 0 && (
+                <div className="category-grid-custom">
+                  {categoryStats.map((item) => (
+                    <div className="category-pill-custom" key={item.name}>
+                      <span>{item.name}</span>
+                      <strong>{item.count}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
         {activeTab === "content" && (
           <>
             <section className="admin-card-custom">
-              <h2>Adicionar conteúdo via TMDB</h2>
+              <h2>
+                {type === "anime"
+                  ? "Adicionar anime via AniList"
+                  : "Adicionar conteúdo via TMDB"}
+              </h2>
+
+              {tmdbError && (
+                <div className="tmdb-error-custom">
+                  <strong>
+                    {type === "anime"
+                      ? "Erro ao importar do AniList"
+                      : "Erro ao importar do TMDB"}
+                  </strong>
+
+                  <p>{tmdbError}</p>
+
+                  <small>
+                    {type === "anime"
+                      ? "Confira o ID/nome no AniList e se o backend consegue acessar https://graphql.anilist.co."
+                      : "Confira o IMDb ID, a TMDB_API_KEY no backend e se o conteúdo existe no TMDB."}
+                  </small>
+                </div>
+              )}
 
               <div className="form-grid-custom">
-                <input
-                  placeholder="IMDb ID. Ex: tt2911666"
-                  value={imdbId}
-                  onChange={(e) => setImdbId(e.target.value)}
-                />
+                {type === "anime" ? (
+                  <input
+                    placeholder="AniList ID ou nome do anime. Ex: 21 ou One Piece"
+                    value={anilistInput}
+                    onChange={(e) => {
+                      setAnilistInput(e.target.value);
+                      setTmdbError("");
+                    }}
+                  />
+                ) : (
+                  <input
+                    placeholder="IMDb ID. Ex: tt2911666"
+                    value={imdbId}
+                    onChange={(e) => {
+                      setImdbId(e.target.value);
+                      setTmdbError("");
+                    }}
+                  />
+                )}
 
                 <input
-                  placeholder="Categoria"
+                  placeholder={
+                    type === "anime"
+                      ? "Categoria opcional. Se vazio, usa gêneros do AniList"
+                      : "Categoria. Ex: Ação, Drama"
+                  }
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    setTmdbError("");
+                  }}
                 />
 
                 <select
                   value={type}
-                  onChange={(e) => setType(e.target.value)}
+                  onChange={(e) => {
+                    setType(e.target.value);
+                    setTmdbError("");
+                  }}
                 >
                   <option value="movie">Filme</option>
                   <option value="series">Série</option>
@@ -820,8 +1232,23 @@ export default function Admin() {
                 </div>
               )}
 
-              <button className="primary-btn-custom" onClick={handleSubmit}>
-                Adicionar
+              {type === "anime" && (
+                <div className="source-box-custom">
+                  <h3>Como funciona anime?</h3>
+
+                  <p className="embed-warning-custom">
+                    O anime será buscado no AniList e os episódios serão criados automaticamente.
+                    Depois, clique em Gerenciar para aplicar servidores nos episódios.
+                  </p>
+                </div>
+              )}
+
+              <button
+                className="primary-btn-custom"
+                onClick={handleSubmit}
+                disabled={addingContent}
+              >
+                {addingContent ? "Adicionando..." : "Adicionar"}
               </button>
             </section>
 
@@ -829,7 +1256,7 @@ export default function Admin() {
               <h2>Conteúdo cadastrado</h2>
 
               <input
-                placeholder="Buscar conteúdo"
+                placeholder="Buscar por título, categoria, tipo, IMDb, TMDB, destaque ou servidor"
                 value={adminSearch}
                 onChange={(e) => setAdminSearch(e.target.value)}
               />
@@ -857,7 +1284,7 @@ export default function Admin() {
                         </p>
 
                         <p>
-                          TMDB: {movie.tmdbId || "N/A"} • Servidores:{" "}
+                          TMDB/AniList: {movie.tmdbId || movie.imdbId || "N/A"} • Servidores:{" "}
                           {movie.sources?.length || 0} • Episódios:{" "}
                           {movie.episodes?.length || 0}
                         </p>
@@ -928,10 +1355,21 @@ export default function Admin() {
                       <h3>Aplicar servidor em todos os episódios</h3>
 
                       <p>
-                        Use variáveis no link: <strong>{"{tmdbId}"}</strong>,{" "}
-                        <strong>{"{season}"}</strong>,{" "}
-                        <strong>{"{episode}"}</strong>,{" "}
-                        <strong>{"{imdbId}"}</strong>
+                        {selectedMovie.type === "anime" ? (
+                          <>
+                            Use variáveis no link:{" "}
+                            <strong>{"{anilistId}"}</strong>,{" "}
+                            <strong>{"{episode}"}</strong>
+                          </>
+                        ) : (
+                          <>
+                            Use variáveis no link:{" "}
+                            <strong>{"{tmdbId}"}</strong>,{" "}
+                            <strong>{"{season}"}</strong>,{" "}
+                            <strong>{"{episode}"}</strong>,{" "}
+                            <strong>{"{imdbId}"}</strong>
+                          </>
+                        )}
                       </p>
 
                       <input
@@ -1007,7 +1445,7 @@ export default function Admin() {
                     <h3>Episódios</h3>
 
                     <input
-                      placeholder="Buscar episódio"
+                      placeholder="Buscar episódio por título, temporada, EP ou servidores"
                       value={episodeSearch}
                       onChange={(e) => setEpisodeSearch(e.target.value)}
                     />
@@ -1074,7 +1512,7 @@ export default function Admin() {
             <h2>Gerenciar usuários</h2>
 
             <input
-              placeholder="Buscar usuário por email ou ID"
+              placeholder="Buscar por email, ID, premium, gratuito, admin, usuário, favoritos ou perfis"
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
             />
@@ -1099,7 +1537,8 @@ export default function Admin() {
                       <p>
                         {user.isPremium ? "Premium" : "Gratuito"} •{" "}
                         {user.isAdmin ? "Admin" : "Usuário"} • Favoritos:{" "}
-                        {user.favoritesCount || 0}
+                        {user.favoritesCount || 0} • Perfis:{" "}
+                        {user.profilesCount || 0}
                       </p>
 
                       <small>ID: {user.id}</small>
@@ -1136,9 +1575,45 @@ export default function Admin() {
       <style jsx global>{`
         .admin-page-custom {
           min-height: 100vh;
-          background: #141414;
+          background:
+            radial-gradient(circle at top left, rgba(229, 9, 20, 0.14), transparent 28%),
+            linear-gradient(180deg, #070707, #141414 42%);
           color: white;
           padding: 30px;
+        }
+
+        .admin-hero-custom {
+          margin-bottom: 26px;
+          padding: 28px;
+          border-radius: 22px;
+          background:
+            linear-gradient(135deg, rgba(229, 9, 20, 0.18), transparent),
+            rgba(27, 27, 27, 0.92);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: 0 22px 70px rgba(0, 0, 0, 0.45);
+        }
+
+        .admin-kicker-custom {
+          display: inline-block;
+          background: #e50914;
+          color: white;
+          padding: 7px 12px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.8px;
+          margin-bottom: 14px;
+        }
+
+        .admin-hero-custom h1 {
+          color: white;
+          font-size: 3rem;
+          margin-bottom: 10px;
+        }
+
+        .admin-hero-custom p {
+          color: #cfcfcf;
+          line-height: 1.6;
         }
 
         h1 {
@@ -1155,28 +1630,226 @@ export default function Admin() {
           display: flex;
           gap: 10px;
           margin-bottom: 25px;
+          flex-wrap: wrap;
         }
 
         .admin-tabs-custom button {
-          background: #242424;
+          background: rgba(255, 255, 255, 0.08);
           color: white;
-          border: none;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 13px 18px;
-          border-radius: 10px;
+          border-radius: 12px;
           cursor: pointer;
           font-weight: bold;
         }
 
         .admin-tabs-custom button.active {
           background: #e50914;
+          border-color: #e50914;
+          box-shadow: 0 12px 28px rgba(229, 9, 20, 0.28);
+        }
+
+        .analytics-grid-custom {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+          gap: 16px;
+          margin-bottom: 25px;
+        }
+
+        .analytics-card-custom {
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
+            #1b1b1b;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 18px;
+          padding: 22px;
+          box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        .analytics-card-custom.premium {
+          background:
+            linear-gradient(135deg, rgba(255, 211, 106, 0.13), transparent),
+            #1b1b1b;
+        }
+
+        .analytics-card-custom span {
+          display: block;
+          color: #aaa;
+          margin-bottom: 12px;
+          font-size: 14px;
+        }
+
+        .analytics-card-custom strong {
+          display: block;
+          font-size: 2.2rem;
+          margin-bottom: 8px;
+        }
+
+        .analytics-card-custom p {
+          color: #888;
+          font-size: 13px;
+        }
+
+        .dashboard-card-custom {
+          overflow: hidden;
+        }
+
+        .dashboard-main-custom {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 20px;
+          padding-bottom: 22px;
+          margin-bottom: 22px;
+          border-bottom: 1px solid #333;
+        }
+
+        .dashboard-main-custom p {
+          color: #ccc;
+          line-height: 1.6;
+        }
+
+        .dashboard-split-custom {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 18px;
+        }
+
+        .dashboard-panel-custom {
+          background: #151515;
+          border: 1px solid #333;
+          border-radius: 16px;
+          padding: 18px;
+        }
+
+        .dashboard-row-custom,
+        .dashboard-user-custom {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px;
+          border-radius: 12px;
+          background: #202020;
+          margin-bottom: 10px;
+        }
+
+        .dashboard-row-custom img,
+        .dashboard-placeholder-custom {
+          width: 48px;
+          height: 68px;
+          border-radius: 8px;
+          object-fit: cover;
+          background: #111;
+          flex-shrink: 0;
+        }
+
+        .dashboard-avatar-custom {
+          width: 46px;
+          height: 46px;
+          border-radius: 12px;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #e50914, #7a0006);
+          flex-shrink: 0;
+          font-weight: bold;
+        }
+
+        .dashboard-avatar-custom img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .dashboard-row-custom p,
+        .dashboard-user-custom p {
+          color: #aaa;
+          margin-top: 4px;
+          font-size: 13px;
+        }
+
+        .category-header-custom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 18px;
+        }
+
+        .category-header-custom h2 {
+          margin-bottom: 0;
+        }
+
+        .category-header-custom strong {
+          color: #e50914;
+        }
+
+        .category-grid-custom {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 12px;
+        }
+
+        .category-pill-custom {
+          background: #151515;
+          border: 1px solid #333;
+          border-radius: 14px;
+          padding: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .category-pill-custom span {
+          color: #ddd;
+          font-weight: bold;
+        }
+
+        .category-pill-custom strong {
+          background: #e50914;
+          min-width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .tmdb-error-custom {
+          background: rgba(229, 9, 20, 0.12);
+          border: 1px solid rgba(229, 9, 20, 0.45);
+          border-radius: 14px;
+          padding: 16px;
+          margin-bottom: 18px;
+        }
+
+        .tmdb-error-custom strong {
+          display: block;
+          margin-bottom: 8px;
+          color: #fff;
+        }
+
+        .tmdb-error-custom p {
+          color: #ffd0d0;
+          margin-bottom: 8px;
+          line-height: 1.5;
+        }
+
+        .tmdb-error-custom small {
+          color: #bbb;
         }
 
         .admin-card-custom {
-          background: #1b1b1b;
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+            #1b1b1b;
           padding: 25px;
-          border-radius: 16px;
+          border-radius: 18px;
           margin-bottom: 25px;
-          box-shadow: 0 12px 35px rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          box-shadow: 0 14px 45px rgba(0, 0, 0, 0.38);
         }
 
         .manage-card-custom {
@@ -1224,18 +1897,19 @@ export default function Admin() {
         input,
         select {
           width: 100%;
-          background: #2b2b2b;
+          background: #111;
           color: white;
-          border: none;
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 14px;
-          border-radius: 8px;
+          border-radius: 10px;
           outline: none;
           margin-bottom: 10px;
         }
 
         input:focus,
         select:focus {
-          box-shadow: 0 0 0 2px #e50914;
+          border-color: #e50914;
+          box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.18);
         }
 
         .checkbox-custom {
@@ -1244,7 +1918,7 @@ export default function Admin() {
           gap: 8px;
           background: #242424;
           padding: 14px;
-          border-radius: 8px;
+          border-radius: 10px;
         }
 
         .checkbox-custom input {
@@ -1257,7 +1931,7 @@ export default function Admin() {
           color: white;
           border: none;
           padding: 11px 15px;
-          border-radius: 8px;
+          border-radius: 10px;
           cursor: pointer;
           margin: 5px 5px 5px 0;
           transition: 0.2s;
@@ -1505,15 +2179,29 @@ export default function Admin() {
             padding: 12px;
           }
 
+          .admin-hero-custom {
+            padding: 20px;
+          }
+
+          .admin-hero-custom h1 {
+            font-size: 2.2rem;
+          }
+
           .admin-tabs-custom {
             flex-direction: column;
           }
 
+          .category-header-custom,
+          .dashboard-main-custom,
           .manage-header-custom,
           .movie-item-custom,
           .user-item-custom {
             flex-direction: column;
             align-items: stretch;
+          }
+
+          .dashboard-split-custom {
+            grid-template-columns: 1fr;
           }
 
           .movie-info-custom,
@@ -1550,6 +2238,24 @@ export default function Admin() {
         }
       `}</style>
     </>
+  );
+}
+
+function AnalyticsCard({
+  title,
+  value,
+  description,
+  loading,
+  premium = false
+}) {
+  return (
+    <div className={premium ? "analytics-card-custom premium" : "analytics-card-custom"}>
+      <span>{title}</span>
+
+      <strong>{loading ? "..." : value}</strong>
+
+      <p>{description}</p>
+    </div>
   );
 }
 

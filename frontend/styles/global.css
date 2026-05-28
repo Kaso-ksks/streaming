@@ -1234,3 +1234,185 @@ a {
     height: 185px;
   }
 }
+
+/* ===== Kyzo cinematic polish ===== */
+
+:root {
+  --kyzo-bg: #080808;
+  --kyzo-card: #171717;
+  --kyzo-card-2: #202020;
+  --kyzo-red: #e50914;
+  --kyzo-red-2: #ff1f2d;
+  --kyzo-muted: #b8b8b8;
+  --kyzo-gold: #ffd36a;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(229,9,20,0.11), transparent 28%),
+    linear-gradient(180deg, #070707, #141414 42%);
+}
+
+.header {
+  background: rgba(7,7,7,0.82) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  box-shadow: 0 10px 35px rgba(0,0,0,0.28);
+}
+
+.logo h1 {
+  text-shadow: 0 0 24px rgba(229,9,20,0.35);
+}
+
+.hero {
+  position: relative;
+  animation: kyzoFade 0.45s ease both;
+}
+
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(20,20,20,0.92), transparent 55%),
+    linear-gradient(0deg, #141414, transparent 30%);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  animation: kyzoSlideUp 0.55s ease both;
+}
+
+.hero-tag,
+.profile-tag-custom,
+.movie-category {
+  box-shadow: 0 8px 25px rgba(229,9,20,0.25);
+}
+
+.container {
+  animation: kyzoFade 0.35s ease both;
+}
+
+.movie-section {
+  animation: kyzoSlideUp 0.45s ease both;
+}
+
+.row-card {
+  position: relative;
+  background: linear-gradient(180deg, #202020, #111) !important;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+  will-change: transform;
+}
+
+.row-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent 45%, rgba(0,0,0,0.92));
+  opacity: 0;
+  transition: 0.25s;
+  pointer-events: none;
+}
+
+.row-card:hover::before {
+  opacity: 1;
+}
+
+.row-card:hover {
+  transform: scale(1.08) translateY(-8px) !important;
+  box-shadow:
+    0 24px 80px rgba(0,0,0,0.72),
+    0 0 0 1px rgba(255,255,255,0.08);
+  z-index: 8;
+}
+
+.row-card img {
+  transition: 0.35s;
+}
+
+.row-card:hover img {
+  transform: scale(1.08);
+  filter: brightness(0.86) contrast(1.05);
+}
+
+.card-title {
+  position: relative;
+  z-index: 2;
+}
+
+.play-button,
+.info-button,
+.header-buttons a,
+.header-buttons button,
+.auth-box button,
+.primary-btn-custom {
+  box-shadow: 0 10px 28px rgba(0,0,0,0.22);
+}
+
+.play-button:hover,
+.info-button:hover,
+.header-buttons a:hover,
+.header-buttons button:hover {
+  transform: translateY(-2px);
+}
+
+.auth-box,
+.profile-card-custom,
+.admin-card-custom,
+.admin-box,
+.admin-list {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), transparent),
+    #171717 !important;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 22px 80px rgba(0,0,0,0.45);
+}
+
+input,
+select,
+textarea {
+  background: #111 !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--kyzo-red) !important;
+  box-shadow: 0 0 0 3px rgba(229,9,20,0.18) !important;
+}
+
+@keyframes kyzoFade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes kyzoSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .row-card:hover {
+    transform: none !important;
+  }
+
+  .row-card:hover img {
+    transform: none;
+    filter: none;
+  }
+}

@@ -23,10 +23,23 @@ function normalizeSource(source = {}) {
   };
 }
 
+function getAniListId(movie) {
+  if (!movie?.imdbId) return "";
+
+  if (String(movie.imdbId).startsWith("anilist:")) {
+    return String(movie.imdbId).replace("anilist:", "");
+  }
+
+  return "";
+}
+
 function buildEpisodeUrl(template, movie, episode) {
+  const anilistId = getAniListId(movie);
+
   return template
     .replaceAll("{tmdbId}", String(movie.tmdbId || ""))
     .replaceAll("{imdbId}", String(movie.imdbId || ""))
+    .replaceAll("{anilistId}", String(anilistId || ""))
     .replaceAll("{season}", String(episode.seasonNumber))
     .replaceAll("{episode}", String(episode.episodeNumber));
 }
@@ -198,7 +211,7 @@ router.post("/movies", async (req, res) => {
 
       if (!tvResult) {
         return res.status(404).json({
-          message: "Série/anime não encontrado na TMDB"
+          message: "Série não encontrada na TMDB"
         });
       }
 
@@ -328,6 +341,13 @@ router.put("/movies/:movieId/episodes/bulk", async (req, res) => {
     if (!movie.episodes?.length) {
       return res.status(400).json({
         message: "Esse item não possui episódios"
+      });
+    }
+
+    if (movie.type === "anime" && !getAniListId(movie)) {
+      return res.status(400).json({
+        message:
+          "Esse anime não possui AniList ID salvo. Reimporte pelo fluxo AniList."
       });
     }
 
